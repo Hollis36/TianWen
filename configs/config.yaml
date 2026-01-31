@@ -1,0 +1,56 @@
+# TianWen Framework Configuration
+# Main entry point for Hydra configuration
+
+defaults:
+  - detector: yolov8
+  - vlm: qwen_vl
+  - fusion: distillation
+  - dataset: coco
+  - _self_
+
+# Training settings
+train:
+  max_epochs: 100
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  warmup_epochs: 3
+  scheduler: cosine
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 1
+
+# Trainer settings (PyTorch Lightning)
+trainer:
+  accelerator: auto
+  devices: auto
+  precision: 16-mixed
+  max_epochs: ${train.max_epochs}
+  gradient_clip_val: ${train.gradient_clip_val}
+  accumulate_grad_batches: ${train.accumulate_grad_batches}
+  log_every_n_steps: 50
+  check_val_every_n_epoch: 1
+
+# Logging
+logging:
+  project: tianwen
+  name: null  # Auto-generated if null
+  save_dir: ./outputs
+  log_model: true
+
+# Paths
+paths:
+  data_dir: ./data
+  output_dir: ./outputs
+  checkpoint_dir: ./checkpoints
+
+# Reproducibility
+seed: 42
+
+# Hydra settings
+hydra:
+  run:
+    dir: ${paths.output_dir}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ${paths.output_dir}/multirun/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}

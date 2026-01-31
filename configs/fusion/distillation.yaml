@@ -1,0 +1,24 @@
+# Knowledge Distillation Fusion Configuration
+
+type: distillation
+
+# Distillation mode
+# Options: feature, logit, response
+distill_mode: feature
+
+# Temperature for softening distributions
+temperature: 4.0
+
+# Balance between distillation and task loss
+alpha: 0.5
+
+# Loss weights
+feature_loss_weight: 1.0
+det_loss_weight: 1.0
+
+# Freeze settings
+freeze_vlm: true
+freeze_detector: false
+
+# Feature projector hidden dimension
+projector_hidden_dim: null  # Auto: (det_dim + vlm_dim) // 2

@@ -1,0 +1,104 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# PyTorch
+*.pth
+*.pt
+*.ckpt
+*.pkl
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Environment variables
+.env
+.env.local
+
+# Logs and outputs
+*.log
+logs/
+runs/
+wandb/
+tensorboard/
+
+# Model checkpoints and weights
+checkpoints/
+weights/
+*.pt
+*.pth
+*.ckpt
+distillation_checkpoints/
+*.pkl
+
+# Benchmark results (can be regenerated)
+benchmark_results.json
+coco_benchmark_results/
+coco_benchmark_real_vlm/
+distillation_results/
+soft_labels/
+visualization_results/
+
+# Data files (uncomment if datasets are large)
+# data/
+# datasets/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+nul
+
+# Hydra outputs
+outputs/
+.multirun/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json

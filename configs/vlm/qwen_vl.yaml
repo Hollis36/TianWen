@@ -1,0 +1,22 @@
+# Qwen-VL Vision-Language Model Configuration
+
+type: qwen_vl
+
+# Model name or path
+# Options: qwen2-vl-2b, qwen2-vl-7b, qwen2-vl-72b
+# Or full HuggingFace path: Qwen/Qwen2-VL-7B-Instruct
+model_name: Qwen/Qwen2-VL-7B-Instruct
+
+# Device and precision
+device: cuda
+dtype: float16
+
+# Freeze VLM during training (recommended)
+freeze: true
+
+# Flash Attention 2 (requires compatible GPU)
+use_flash_attention: true
+
+# Image processing
+max_pixels: 1003520  # 1280 * 28 * 28
+min_pixels: 200704   # 256 * 28 * 28

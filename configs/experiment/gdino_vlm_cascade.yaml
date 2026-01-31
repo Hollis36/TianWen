@@ -1,0 +1,43 @@
+# Experiment: Grounding-DINO + VLM Cascade
+#
+# VLM generates object descriptions -> Grounding-DINO detects
+# This creates a natural language interface for detection
+
+defaults:
+  - /detector: grounding_dino
+  - /vlm: internvl
+  - /fusion: decision_fusion
+  - /dataset: coco
+  - _self_
+
+# Experiment name
+experiment_name: gdino_vlm_cascade
+
+# Override detector settings
+detector:
+  model_name: groundingdino-swint
+  conf_threshold: 0.3
+  text_threshold: 0.2
+
+# Override VLM settings
+vlm:
+  model_name: OpenGVLab/InternVL3-8B-hf
+  freeze: true
+
+# Override fusion settings - decision fusion for cascade
+fusion:
+  type: decision_fusion
+  verification_mode: binary
+  score_adjustment: 0.3
+  min_confidence: 0.2
+
+# Training settings
+train:
+  max_epochs: 50
+  batch_size: 4
+  learning_rate: 5e-5
+
+# Trainer settings
+trainer:
+  precision: bf16-mixed
+  accumulate_grad_batches: 4

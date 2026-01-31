@@ -1,0 +1,26 @@
+# Decision Fusion Configuration
+
+type: decision_fusion
+
+# Verification mode
+# Options: binary, confidence, reclassify
+verification_mode: binary
+
+# Score adjustment factor
+score_adjustment: 0.3
+
+# Minimum confidence to keep detection
+min_confidence: 0.1
+
+# Maximum detections to verify per image
+max_verifications: 50
+
+# Freeze settings
+freeze_vlm: true
+freeze_detector: false
+
+# Use trainable score fusion module
+use_trainable_scorer: true
+
+# Class names (set in experiment config)
+class_names: null

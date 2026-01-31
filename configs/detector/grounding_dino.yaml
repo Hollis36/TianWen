@@ -1,0 +1,28 @@
+# Grounding-DINO Detector Configuration
+# Open-vocabulary object detection
+
+type: grounding_dino
+
+# Model variant: groundingdino-swint, groundingdino-swinb
+model_name: groundingdino-swint
+
+# Number of classes (for fixed-vocabulary mode)
+num_classes: 80
+
+# Input size
+input_size: [800, 800]
+
+# Use pretrained weights
+pretrained: true
+
+# Box confidence threshold
+conf_threshold: 0.35
+
+# Text confidence threshold
+text_threshold: 0.25
+
+# Optional custom checkpoint
+checkpoint_path: null
+
+# Default classes (COCO) - can be overridden with text prompts
+default_classes: null

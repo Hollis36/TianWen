@@ -1,0 +1,22 @@
+# InternVL3 Vision-Language Model Configuration
+# State-of-the-art open-source VLM: 72.2 MMMU
+
+type: internvl
+
+# Model name or path
+# Options: internvl3-1b, internvl3-2b, internvl3-8b, internvl3-26b, internvl3-78b
+# Or full HuggingFace path: OpenGVLab/InternVL3-8B-hf
+model_name: OpenGVLab/InternVL3-8B-hf
+
+# Device and precision
+device: cuda
+dtype: bfloat16
+
+# Freeze VLM during training (recommended)
+freeze: true
+
+# Flash Attention 2 (requires compatible GPU)
+use_flash_attention: true
+
+# Maximum number of images for multi-image input
+max_num_images: 6

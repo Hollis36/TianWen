@@ -1,0 +1,24 @@
+# Feature Fusion Configuration
+
+type: feature_fusion
+
+# Where to inject VLM features
+# Options: backbone, neck, head
+fusion_level: neck
+
+# Fusion method
+# Options: cross_attention, adapter, concat
+fusion_type: cross_attention
+
+# Cross-attention settings
+num_attention_heads: 8
+
+# Adapter settings
+use_gate: true
+
+# Freeze settings
+freeze_vlm: true
+freeze_detector: false
+
+# Detector feature dimension (depends on model)
+det_feature_dim: 512

@@ -1,0 +1,25 @@
+# RF-DETR Detector Configuration
+# State-of-the-art: 60.5 mAP on COCO
+
+type: rf_detr
+
+# Model variant: nano, small, base, large, xlarge, 2xlarge
+model_name: rf-detr-base
+
+# Number of classes
+num_classes: 80
+
+# Input size (RF-DETR is flexible)
+input_size: [640, 640]
+
+# Use pretrained weights (DINOv2 backbone)
+pretrained: true
+
+# Confidence threshold
+conf_threshold: 0.5
+
+# Optional custom checkpoint
+checkpoint_path: null
+
+# Freeze DINOv2 backbone
+freeze_backbone: false

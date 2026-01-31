@@ -1,0 +1,49 @@
+# Experiment: RF-DETR + InternVL3 + Knowledge Distillation
+#
+# Combines the SOTA detector (RF-DETR, 60.5 mAP) with
+# the SOTA open-source VLM (InternVL3, 72.2 MMMU)
+
+defaults:
+  - /detector: rf_detr
+  - /vlm: internvl
+  - /fusion: distillation
+  - /dataset: coco
+  - _self_
+
+# Experiment name
+experiment_name: rfdetr_internvl3_distill
+
+# Override detector settings
+detector:
+  model_name: rf-detr-base
+  freeze_backbone: false
+
+# Override VLM settings
+vlm:
+  model_name: OpenGVLab/InternVL3-8B-hf
+  freeze: true
+
+# Override fusion settings
+fusion:
+  distill_mode: feature
+  temperature: 4.0
+  alpha: 0.5
+  feature_loss_weight: 1.0
+
+# Training settings
+train:
+  max_epochs: 100
+  batch_size: 4  # Smaller due to large models
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  warmup_epochs: 5
+
+# Trainer settings
+trainer:
+  precision: bf16-mixed
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 4  # Effective batch size: 16
+
+# Logging
+logging:
+  name: ${experiment_name}

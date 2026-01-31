@@ -1,0 +1,50 @@
+# Experiment: YOLOv8-L + Qwen2-VL-7B + Knowledge Distillation
+#
+# This experiment uses Qwen2-VL as a teacher to distill knowledge
+# into YOLOv8-L detector through feature alignment.
+
+defaults:
+  - /detector: yolov8
+  - /vlm: qwen_vl
+  - /fusion: distillation
+  - /dataset: coco
+  - override /hydra/job_logging: colorlog
+  - _self_
+
+# Experiment name
+experiment_name: yolov8l_qwen2vl_distill
+
+# Override detector settings
+detector:
+  model_name: yolov8l
+  freeze_backbone: false
+
+# Override VLM settings
+vlm:
+  model_name: Qwen/Qwen2-VL-7B-Instruct
+  freeze: true
+
+# Override fusion settings
+fusion:
+  distill_mode: feature
+  temperature: 4.0
+  alpha: 0.5
+  feature_loss_weight: 1.0
+
+# Training settings
+train:
+  max_epochs: 100
+  batch_size: 8  # Smaller due to VLM memory
+  learning_rate: 1e-4
+  weight_decay: 0.01
+  warmup_epochs: 5
+
+# Trainer settings
+trainer:
+  precision: 16-mixed
+  gradient_clip_val: 1.0
+  accumulate_grad_batches: 2  # Effective batch size: 16
+
+# Logging
+logging:
+  name: ${experiment_name}

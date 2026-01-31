@@ -1,0 +1,28 @@
+# RT-DETR / RT-DETRv2 Detector Configuration
+# Real-time DETR: 53.1% AP @ 108 FPS
+
+type: rtdetr
+
+# Model variant: rtdetr-l, rtdetr-x
+model_name: rtdetr-l
+
+# Number of classes
+num_classes: 80
+
+# Input size
+input_size: [640, 640]
+
+# Use pretrained weights
+pretrained: true
+
+# Confidence threshold
+conf_threshold: 0.5
+
+# Optional custom checkpoint
+checkpoint_path: null
+
+# Use ultralytics implementation
+use_ultralytics: true
+
+# Freeze backbone
+freeze_backbone: false
