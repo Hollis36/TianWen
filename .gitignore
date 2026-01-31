@@ -44,6 +44,9 @@ ENV/
 # VS Code
 .vscode/
 
+# Claude/Cursor
+.claude/
+
 # Environment variables
 .env
 .env.local
