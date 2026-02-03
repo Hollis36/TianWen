@@ -1,9 +1,15 @@
 """Visualization utilities for TianWen framework."""
 
 from typing import List, Optional, Tuple
+
 import numpy as np
 import torch
 from torch import Tensor
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 
 def draw_boxes(
@@ -32,10 +38,8 @@ def draw_boxes(
     Returns:
         Image with boxes drawn
     """
-    try:
-        import cv2
-    except ImportError:
-        raise ImportError("OpenCV is required for visualization")
+    if cv2 is None:
+        raise ImportError("OpenCV is required for visualization: pip install opencv-python")
 
     image = image.copy()
 
@@ -143,7 +147,6 @@ def visualize_detections(
             # Draw GT boxes in green
             for box, label in zip(gt_boxes, gt_labels):
                 x1, y1, x2, y2 = box.astype(int)
-                import cv2
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 1)
 
         visualized.append(img)

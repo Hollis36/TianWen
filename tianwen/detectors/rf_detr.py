@@ -243,7 +243,8 @@ class RFDETRDetector(BaseDetector):
         if hasattr(self.model, "compute_loss"):
             return self.model.compute_loss(outputs, targets)
 
-        # Placeholder
+        # TODO: Implement actual RF-DETR loss computation.
+        logger.warning("Using placeholder RF-DETR loss (returns zeros). Implement _compute_losses() for real training.")
         device = next(self.parameters()).device
         return {
             "loss_ce": torch.tensor(0.0, device=device, requires_grad=True),

@@ -44,6 +44,14 @@ paths:
   output_dir: ./outputs
   checkpoint_dir: ./checkpoints
 
+# Early stopping
+early_stopping:
+  enabled: false
+  monitor: val/mAP@50
+  mode: max
+  patience: 10
+  min_delta: 0.001
+
 # Reproducibility
 seed: 42
 

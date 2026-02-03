@@ -5,6 +5,7 @@ Uses VLM as a teacher to provide soft supervision for the detector.
 The VLM provides rich semantic understanding that guides the detector training.
 """
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -16,6 +17,8 @@ from tianwen.core.registry import FUSIONS
 from tianwen.detectors.base import BaseDetector, DetectionOutput, BatchDetectionOutput
 from tianwen.vlms.base import BaseVLM
 from tianwen.fusions.base import BaseFusion, FusionOutput
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureProjector(nn.Module):
@@ -260,13 +263,12 @@ class KnowledgeDistillation(BaseFusion):
 
         Uses VLM features to generate soft class labels.
         """
-        # This is a simplified version
-        # Full implementation would involve:
+        # TODO: Implement actual logit-level distillation:
         # 1. VLM generating class probabilities
         # 2. Softening with temperature
         # 3. KL divergence with detector predictions
+        logger.warning("Using placeholder logit distillation loss (returns zero). Implement _compute_logit_distill_loss() for real training.")
 
-        # Placeholder: use feature similarity as proxy
         device = vlm_features.device
         return torch.tensor(0.0, device=device, requires_grad=True)
 
@@ -281,18 +283,14 @@ class KnowledgeDistillation(BaseFusion):
 
         Uses VLM text responses to guide detector training.
         """
-        # This requires text generation and parsing
-        # Simplified version: verify detections and penalize incorrect ones
-
-        device = images.device
-        loss = torch.tensor(0.0, device=device, requires_grad=True)
-
-        # In full implementation:
+        # TODO: Implement actual response-based distillation:
         # 1. Generate VLM descriptions of ground truth
         # 2. Compare with detector predictions
         # 3. Compute consistency loss
+        logger.warning("Using placeholder response distillation loss (returns zero). Implement _compute_response_distill_loss() for real training.")
 
-        return loss
+        device = images.device
+        return torch.tensor(0.0, device=device, requires_grad=True)
 
     def compute_loss(
         self,

@@ -5,7 +5,8 @@ Uses VLM to verify, refine, or correct detection results at the decision level.
 This is a post-processing approach where VLM acts as a verifier/refiner.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -274,7 +275,6 @@ class DecisionFusion(BaseFusion):
 
         elif self.verification_mode == "confidence":
             # Try to extract a number
-            import re
             numbers = re.findall(r"\d+", response)
             if numbers:
                 conf = float(numbers[0]) / 100.0

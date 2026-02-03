@@ -6,9 +6,10 @@ Train detector with VLM knowledge distillation using TianWen framework.
 This demonstrates how to use VLM features to improve detector performance.
 """
 
+import os
 import sys
 from pathlib import Path
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import torch
@@ -23,7 +24,7 @@ from collections import defaultdict
 import time
 
 # COCO paths
-COCO_ROOT = Path("E:/demo/test1-1127/datasets/coco")
+COCO_ROOT = Path(os.environ.get("COCO_ROOT", "./data/coco"))
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "annotations" / "instances_val2017.json"
 

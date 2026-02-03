@@ -36,15 +36,17 @@ dependencies = [
     "pytorch-lightning>=2.0.0",
     "hydra-core>=1.3.0",
     "omegaconf>=2.3.0",
-    "transformers>=4.35.0",
-    "ultralytics>=8.0.0",
+    "transformers>=4.45.0",
+    "ultralytics>=8.3.0",
     "pycocotools>=2.0.0",
     "opencv-python>=4.8.0",
     "numpy>=1.24.0",
     "pillow>=10.0.0",
+    "albumentations>=1.3.0",
     "tqdm>=4.65.0",
     "wandb>=0.15.0",
     "tensorboard>=2.14.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -59,10 +61,16 @@ dev = [
 deepspeed = [
     "deepspeed>=0.10.0",
 ]
+rfdetr = [
+    # RF-DETR requires special installation: pip install rfdetr
+    "rfdetr>=0.1.0",
+]
 
 [project.scripts]
 tianwen-train = "tools.train:main"
 tianwen-eval = "tools.eval:main"
+tianwen-demo = "tools.demo:main"
+tianwen-benchmark = "tools.benchmark:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

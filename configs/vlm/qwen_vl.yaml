@@ -8,6 +8,10 @@ type: qwen_vl
 model_name: Qwen/Qwen2-VL-7B-Instruct
 
 # Device and precision
+# dtype options:
+#   float16  - Fast, widely supported on most GPUs (recommended for Ampere+)
+#   bfloat16 - Better numerical stability, requires Ampere+ GPU
+#   float32  - Full precision, slower but most stable
 device: cuda
 dtype: float16
 

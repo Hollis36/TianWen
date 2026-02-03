@@ -113,8 +113,11 @@ class VisualizationCallback(Callback):
         predictions: Any,
         targets: List[Dict[str, Tensor]],
     ) -> Tensor:
-        """Draw bounding boxes on images."""
-        # Placeholder - actual implementation would use OpenCV or PIL
+        """Draw bounding boxes on images.
+
+        TODO: Implement actual visualization using OpenCV or PIL.
+        """
+        logger.warning("_draw_predictions() is a placeholder; returning raw images without boxes drawn.")
         return images
 
 
@@ -190,8 +193,11 @@ class MetricsCallback(Callback):
         return metrics
 
     def _compute_ap(self, iou_threshold: float) -> float:
-        """Compute Average Precision at given IoU threshold."""
-        # Placeholder - actual implementation would use proper AP computation
+        """Compute Average Precision at given IoU threshold.
+
+        TODO: Implement actual AP computation using pycocotools.COCOeval.
+        """
+        logger.warning("_compute_ap() is a placeholder; returning 0.0. Implement with pycocotools for real metrics.")
         return 0.0
 
 

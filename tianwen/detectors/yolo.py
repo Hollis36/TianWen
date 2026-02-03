@@ -340,10 +340,11 @@ class YOLODetector(BaseDetector):
         """
         Compute YOLO losses.
 
-        This is a placeholder. Actual implementation should use
-        the ultralytics loss functions or custom implementation.
+        TODO: Implement actual YOLO loss computation using ultralytics
+        loss functions or a custom implementation.
         """
-        # Placeholder losses
+        # Placeholder losses - returns zero losses
+        logger.warning("Using placeholder YOLO loss (returns zeros). Implement _compute_yolo_loss() for real training.")
         device = predictions[0].device if isinstance(predictions, (list, tuple)) else predictions.device
         return {
             "box_loss": torch.tensor(0.0, device=device, requires_grad=True),

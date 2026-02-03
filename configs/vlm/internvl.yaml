@@ -9,6 +9,10 @@ type: internvl
 model_name: OpenGVLab/InternVL3-8B-hf
 
 # Device and precision
+# dtype options:
+#   float16  - Fast, widely supported on most GPUs
+#   bfloat16 - Better numerical stability, requires Ampere+ GPU (recommended for InternVL)
+#   float32  - Full precision, slower but most stable
 device: cuda
 dtype: bfloat16
 

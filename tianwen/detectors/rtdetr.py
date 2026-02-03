@@ -254,7 +254,11 @@ class RTDETRDetector(BaseDetector):
         predictions: Any,
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, Tensor]:
-        """Compute RT-DETR losses."""
+        """Compute RT-DETR losses.
+
+        TODO: Implement actual RT-DETR loss computation (Hungarian matching + losses).
+        """
+        logger.warning("Using placeholder RT-DETR loss (returns zeros). Implement _compute_losses() for real training.")
         device = next(self.parameters()).device
         return {
             "loss_vfl": torch.tensor(0.0, device=device, requires_grad=True),

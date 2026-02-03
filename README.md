@@ -6,8 +6,8 @@ TianWen is a modular, extensible framework for combining object detection models
 
 ## Features
 
-- **Multiple Detector Support**: YOLOv8, YOLOv11, RT-DETR, Grounding-DINO
-- **Multiple VLM Support**: Qwen-VL, Qwen2-VL, InternVL, LLaVA
+- **Multiple Detector Support**: YOLOv8, YOLOv11, RT-DETR, RF-DETR, Grounding-DINO
+- **Multiple VLM Support**: Qwen2-VL, InternVL3
 - **Flexible Fusion Strategies**:
   - Knowledge Distillation: VLM as teacher, detector as student
   - Feature Fusion: Inject VLM features into detector
@@ -19,14 +19,22 @@ TianWen is a modular, extensible framework for combining object detection models
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/tianwen.git
+git clone https://github.com/tianwen-framework/tianwen.git
 cd tianwen
 
-# Install dependencies
+# Install core dependencies
 pip install -e .
 
-# Or install with development dependencies
+# Install with development tools
 pip install -e ".[dev]"
+
+# Install with RF-DETR support (requires special installation)
+pip install -e ".[rfdetr]"
+
+# Install Grounding-DINO (from source)
+# pip install groundingdino
+# Or use the autodistill wrapper:
+# pip install autodistill-grounding-dino
 ```
 
 ## Quick Start
@@ -64,23 +72,54 @@ python tools/demo.py \
     --output result.jpg
 ```
 
-## Architecture
+### Benchmarking
+
+```bash
+# Quick benchmark with synthetic data
+python tools/benchmark.py --quick
+
+# Full benchmark
+python tools/benchmark.py --detector yolov8 --vlm qwen_vl --fusion distillation
+```
+
+## Project Structure
 
 ```
 tianwen/
-├── configs/                  # Hydra configurations
-│   ├── detector/             # Detector configs
-│   ├── vlm/                  # VLM configs
-│   ├── fusion/               # Fusion strategy configs
-│   └── experiment/           # Experiment configs
-├── tianwen/
-│   ├── core/                 # Registry and config system
-│   ├── detectors/            # Detection models
-│   ├── vlms/                 # Vision-Language Models
-│   ├── fusions/              # Fusion strategies
-│   ├── datasets/             # Data loading
-│   └── engine/               # Training engine
-└── tools/                    # CLI tools
+├── configs/                      # Hydra configurations
+│   ├── config.yaml               # Main config entry point
+│   ├── detector/                 # Detector configs (yolov8, rtdetr, rf_detr, grounding_dino)
+│   ├── vlm/                      # VLM configs (qwen_vl, internvl)
+│   ├── fusion/                   # Fusion strategy configs
+│   ├── dataset/                  # Dataset configs
+│   └── experiment/               # Pre-defined experiment configs
+├── tianwen/                      # Core framework package
+│   ├── core/                     # Registry and config system
+│   ├── detectors/                # Detection model wrappers
+│   ├── vlms/                     # Vision-Language Model wrappers
+│   ├── fusions/                  # Fusion strategies
+│   ├── datasets/                 # Data loading and transforms
+│   ├── engine/                   # Training engine (Lightning module, callbacks)
+│   └── utils/                    # Visualization, metrics, utilities
+├── tools/                        # CLI entry points
+│   ├── train.py                  # Standard training script (Hydra)
+│   ├── eval.py                   # Evaluation script
+│   ├── demo.py                   # Inference demo
+│   ├── benchmark.py              # Benchmark comparisons
+│   └── experiments/              # Experimental/research scripts
+│       ├── train_distillation.py
+│       ├── train_vlm_distillation.py
+│       ├── generate_vlm_soft_labels.py
+│       ├── generate_vlm_soft_labels_v2.py
+│       ├── run_distillation_pipeline.py
+│       ├── evaluate_distilled_model.py
+│       ├── coco_benchmark.py
+│       ├── coco_benchmark_real_vlm.py
+│       ├── coco_benchmark_tianwen_fusion.py
+│       ├── compare_detector_vlm.py
+│       ├── quick_benchmark.py
+│       └── visualize_comparison.py
+└── tests/                        # Unit tests
 ```
 
 ## Fusion Strategies
@@ -137,6 +176,12 @@ Override any parameter from command line:
 ```bash
 python tools/train.py detector.model_name=yolov8x train.learning_rate=5e-5
 ```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COCO_ROOT` | Path to COCO dataset root directory | `./data/coco` |
 
 ## Extending the Framework
 
@@ -205,8 +250,8 @@ class MyFusion(BaseFusion):
 - Python >= 3.9
 - PyTorch >= 2.0
 - PyTorch Lightning >= 2.0
-- transformers >= 4.35
-- ultralytics >= 8.0
+- transformers >= 4.45
+- ultralytics >= 8.3
 - hydra-core >= 1.3
 
 ## Citation
@@ -215,7 +260,7 @@ class MyFusion(BaseFusion):
 @software{tianwen2024,
   title = {TianWen: A Universal Training Framework for Detection-VLM Fusion},
   year = {2024},
-  url = {https://github.com/your-org/tianwen}
+  url = {https://github.com/tianwen-framework/tianwen}
 }
 ```
 

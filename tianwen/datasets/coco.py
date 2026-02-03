@@ -15,12 +15,14 @@ try:
 except ImportError:
     pl = None
 
+from tianwen.core.registry import DATASETS
 from tianwen.datasets.base import BaseDataset
 from tianwen.datasets.transforms import build_transforms
 
 logger = logging.getLogger(__name__)
 
 
+@DATASETS.register("coco")
 class COCODataset(BaseDataset):
     """
     COCO format dataset.

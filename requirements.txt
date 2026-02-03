@@ -12,6 +12,8 @@ transformers>=4.45.0
 ultralytics>=8.3.0
 
 # Models - RF-DETR (SOTA detector)
+# Install separately: pip install rfdetr
+# Or install via optional dependency: pip install -e ".[rfdetr]"
 rfdetr>=0.1.0
 
 # Models - Grounding-DINO (open-vocabulary detection)

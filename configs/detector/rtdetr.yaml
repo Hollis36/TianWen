@@ -15,8 +15,11 @@ input_size: [640, 640]
 # Use pretrained weights
 pretrained: true
 
-# Confidence threshold
+# Confidence threshold for filtering predictions
 conf_threshold: 0.5
+
+# IoU threshold for NMS (if applicable)
+iou_threshold: 0.45
 
 # Optional custom checkpoint
 checkpoint_path: null
