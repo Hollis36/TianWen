@@ -497,10 +497,15 @@ class ExperimentManager:
 
             # Add rows
             for exp_id, result in sorted(self._experiments.items()):
-                values = [
-                    f"{result.metrics.get(m, 0):.4f}" if isinstance(result.metrics.get(m), float) else str(result.metrics.get(m, "-"))
-                    for m in all_metrics
-                ]
+                values = []
+                for m in all_metrics:
+                    metric_val = result.metrics.get(m)
+                    if isinstance(metric_val, float):
+                        values.append(f"{metric_val:.4f}")
+                    elif metric_val is not None:
+                        values.append(str(metric_val))
+                    else:
+                        values.append("-")
                 row = f"| {exp_id} | " + " | ".join(values) + " |"
                 lines.append(row)
 

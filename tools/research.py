@@ -246,12 +246,28 @@ def cmd_ablation(args):
     ablation = AblationStudy(fusion, eval_fn)
 
     # Add components to ablate
+    # Note: For a proper ablation, you should implement specific disable/enable
+    # functions that properly save and restore the original module state
     if hasattr(fusion, "feature_projector"):
+        # Store original forward method
+        original_forward = fusion.feature_projector.forward
+
+        def disable_projector(m):
+            """Disable feature projector by replacing forward with identity."""
+            def identity_forward(x):
+                return torch.zeros_like(x) if isinstance(x, torch.Tensor) else x
+            m.feature_projector._original_forward = m.feature_projector.forward
+            m.feature_projector.forward = identity_forward
+
+        def enable_projector(m):
+            """Restore original feature projector forward."""
+            if hasattr(m.feature_projector, "_original_forward"):
+                m.feature_projector.forward = m.feature_projector._original_forward
+
         ablation.add_component(
             "feature_projector",
-            disable_fn=lambda m: setattr(m.feature_projector, "forward",
-                                         lambda x: torch.zeros_like(x)),
-            enable_fn=lambda m: None,  # Would need to restore
+            disable_fn=disable_projector,
+            enable_fn=enable_projector,
         )
 
     # Run ablation
