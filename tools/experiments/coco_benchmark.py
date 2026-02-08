@@ -60,6 +60,29 @@ def bbox_coco_to_xyxy(bbox: List[float]) -> List[float]:
     return [x, y, x + w, y + h]
 
 
+def compute_iou_matrix(boxes1: np.ndarray, boxes2: np.ndarray) -> np.ndarray:
+    """Compute IoU between two sets of boxes in xyxy format using vectorized operations.
+
+    Args:
+        boxes1: [N, 4] array of boxes
+        boxes2: [M, 4] array of boxes
+
+    Returns:
+        [N, M] IoU matrix
+    """
+    x1 = np.maximum(boxes1[:, None, 0], boxes2[None, :, 0])
+    y1 = np.maximum(boxes1[:, None, 1], boxes2[None, :, 1])
+    x2 = np.minimum(boxes1[:, None, 2], boxes2[None, :, 2])
+    y2 = np.minimum(boxes1[:, None, 3], boxes2[None, :, 3])
+
+    inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    area1 = (boxes1[:, 2] - boxes1[:, 0]) * (boxes1[:, 3] - boxes1[:, 1])
+    area2 = (boxes2[:, 2] - boxes2[:, 0]) * (boxes2[:, 3] - boxes2[:, 1])
+    union = area1[:, None] + area2[None, :] - inter
+
+    return inter / (union + 1e-6)
+
+
 def compute_iou(box1: np.ndarray, box2: np.ndarray) -> float:
     """Compute IoU between two boxes in xyxy format."""
     x1 = max(box1[0], box2[0])
@@ -81,16 +104,14 @@ def compute_ap(recalls: np.ndarray, precisions: np.ndarray) -> float:
     precisions = np.concatenate([[0], precisions, [0]])
 
     # Make precision monotonically decreasing
-    for i in range(len(precisions) - 2, -1, -1):
-        precisions[i] = max(precisions[i], precisions[i + 1])
+    precisions = np.maximum.accumulate(precisions[::-1])[::-1]
 
-    # 101-point interpolation
+    # 101-point interpolation (vectorized)
     recall_thresholds = np.linspace(0, 1, 101)
-    ap = 0
-    for t in recall_thresholds:
-        prec = precisions[recalls >= t]
-        ap += prec.max() if len(prec) > 0 else 0
-    ap /= 101
+    # For each threshold, find the max precision where recall >= threshold
+    indices = np.searchsorted(recalls, recall_thresholds, side='left')
+    indices = np.minimum(indices, len(precisions) - 1)
+    ap = np.mean(precisions[indices])
 
     return ap
 
@@ -137,6 +158,22 @@ def evaluate_detections(
         # Count total ground truths for this class
         n_gt = sum(len(boxes) for boxes in gts.values())
 
+        # Pre-compute IoU matrices per image for all preds against GTs
+        iou_cache = {}
+        pred_boxes_by_img = defaultdict(list)
+        for p_idx, (img_id, score, pred_box) in enumerate(preds):
+            pred_boxes_by_img[img_id].append((p_idx, pred_box))
+
+        for img_id, pred_items in pred_boxes_by_img.items():
+            if img_id not in gts:
+                continue
+            gt_boxes_arr = np.array(gts[img_id])
+            pred_boxes_arr = np.array([item[1] for item in pred_items])
+            iou_cache[img_id] = compute_iou_matrix(pred_boxes_arr, gt_boxes_arr)
+
+        # Track per-image pred index for iou_cache lookup
+        pred_img_counter = defaultdict(int)
+
         class_aps = []
         for iou_thresh in iou_range:
             # Track which GT boxes have been matched
@@ -145,23 +182,27 @@ def evaluate_detections(
             tp = []
             fp = []
 
+            pred_img_counter.clear()
+
             for img_id, score, pred_box in preds:
                 if img_id not in gts:
                     fp.append(1)
                     tp.append(0)
                     continue
 
-                gt_boxes = gts[img_id]
                 matched = gt_matched[img_id]
+                local_idx = pred_img_counter[img_id]
+                pred_img_counter[img_id] += 1
+
+                iou_row = iou_cache[img_id][local_idx]
 
                 best_iou = 0
                 best_idx = -1
-                for idx, gt_box in enumerate(gt_boxes):
+                for idx in range(len(matched)):
                     if matched[idx]:
                         continue
-                    iou = compute_iou(pred_box, gt_box)
-                    if iou > best_iou:
-                        best_iou = iou
+                    if iou_row[idx] > best_iou:
+                        best_iou = iou_row[idx]
                         best_idx = idx
 
                 if best_iou >= iou_thresh and best_idx >= 0:

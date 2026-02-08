@@ -6,6 +6,7 @@ This is a post-processing approach where VLM acts as a verifier/refiner.
 """
 
 import re
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -182,22 +183,20 @@ class DecisionFusion(BaseFusion):
 
             # Fuse scores
             new_scores = det.scores.clone()
-            for j, idx in enumerate(sorted_indices):
-                original_score = det.scores[idx]
-                vlm_score = vlm_scores[j]
+            original_scores = det.scores[sorted_indices]
 
-                if self.score_fusion is not None:
-                    # Learned score fusion
-                    combined = torch.stack([original_score, vlm_score])
-                    fused_score = self.score_fusion(combined.unsqueeze(0)).squeeze()
-                else:
-                    # Simple weighted combination
-                    fused_score = (
-                        original_score * (1 - self.score_adjustment)
-                        + vlm_score * self.score_adjustment
-                    )
-
-                new_scores[idx] = fused_score
+            if self.score_fusion is not None:
+                # Learned score fusion - batch all sorted detections
+                combined = torch.stack([original_scores, vlm_scores], dim=1)  # [N, 2]
+                fused_scores = self.score_fusion(combined).squeeze(-1)
+                new_scores[sorted_indices] = fused_scores
+            else:
+                # Simple weighted combination (vectorized)
+                fused_scores = (
+                    original_scores * (1 - self.score_adjustment)
+                    + vlm_scores * self.score_adjustment
+                )
+                new_scores[sorted_indices] = fused_scores
 
             # Filter by minimum confidence
             mask = new_scores >= self.min_confidence
@@ -231,33 +230,44 @@ class DecisionFusion(BaseFusion):
         num_dets = len(boxes)
         scores = torch.zeros(num_dets, device=device)
 
+        # Build all prompts first, then batch by unique prompt
+        prompts = []
+        for i in range(num_dets):
+            label = labels[i].item()
+
+            if self.class_names and label < len(self.class_names):
+                class_name = self.class_names[label]
+            else:
+                class_name = f"object class {label}"
+
+            if self.verification_mode == "binary":
+                prompt = f"Is there a {class_name} in this image? Answer only 'yes' or 'no'."
+            elif self.verification_mode == "confidence":
+                prompt = f"How confident are you that there is a {class_name} in this image? Answer with a number from 0 to 100."
+            else:
+                prompt = f"What object is in the center of this image? Identify it briefly."
+
+            prompts.append(prompt)
+
+        # Group detections by identical prompt to batch VLM calls
+        prompt_to_indices = OrderedDict()
+        for i, prompt in enumerate(prompts):
+            if prompt not in prompt_to_indices:
+                prompt_to_indices[prompt] = []
+            prompt_to_indices[prompt].append(i)
+
         with torch.no_grad():
-            for i in range(num_dets):
-                label = labels[i].item()
-
-                if self.class_names and label < len(self.class_names):
-                    class_name = self.class_names[label]
-                else:
-                    class_name = f"object class {label}"
-
-                # Create verification prompt
-                if self.verification_mode == "binary":
-                    prompt = f"Is there a {class_name} in this image? Answer only 'yes' or 'no'."
-                elif self.verification_mode == "confidence":
-                    prompt = f"How confident are you that there is a {class_name} in this image? Answer with a number from 0 to 100."
-                else:
-                    prompt = f"What object is in the center of this image? Identify it briefly."
-
-                # Generate VLM response
+            for prompt, indices in prompt_to_indices.items():
+                # Single VLM call per unique prompt (same image)
                 response = self.vlm.generate(
                     image,
                     [prompt],
                     max_new_tokens=20,
                 )[0].lower().strip()
 
-                # Parse response
                 score = self._parse_vlm_response(response)
-                scores[i] = score
+                for idx in indices:
+                    scores[idx] = score
 
         return scores
 
