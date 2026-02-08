@@ -118,22 +118,21 @@ def compute_metrics(
         # Compute IoU matrix
         ious = compute_iou(pred_boxes, gt_boxes)
 
-        # Match predictions to ground truth
+        # Match predictions to ground truth using vectorized operations
+        # Mask IoU matrix by label match
+        label_match = pred_labels.unsqueeze(1) == gt_labels.unsqueeze(0)  # [N, M]
+        masked_ious = ious * label_match.float()
+
         matched_gt = set()
-        for i in range(len(pred_boxes)):
-            best_iou = 0
-            best_j = -1
+        # Sort predictions by best IoU descending for greedy matching
+        best_ious_per_pred, best_gt_per_pred = masked_ious.max(dim=1)
+        pred_order = torch.argsort(best_ious_per_pred, descending=True)
 
-            for j in range(len(gt_boxes)):
-                if j in matched_gt:
-                    continue
-                if pred_labels[i] != gt_labels[j]:
-                    continue
-                if ious[i, j] > best_iou:
-                    best_iou = ious[i, j]
-                    best_j = j
+        for i in pred_order.tolist():
+            best_j = best_gt_per_pred[i].item()
+            best_iou = masked_ious[i, best_j].item()
 
-            if best_iou >= iou_threshold and best_j >= 0:
+            if best_iou >= iou_threshold and best_j not in matched_gt:
                 total_tp += 1
                 matched_gt.add(best_j)
             else:
