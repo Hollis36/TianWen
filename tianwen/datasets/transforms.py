@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 import numpy as np
 from PIL import Image
+from torchvision.transforms import ColorJitter as TVColorJitter
 
 
 class Compose:
@@ -121,8 +122,6 @@ class ColorJitter:
         self.contrast = contrast
         self.saturation = saturation
         self.hue = hue
-
-        from torchvision.transforms import ColorJitter as TVColorJitter
 
         self._transform = TVColorJitter(
             brightness=self.brightness,

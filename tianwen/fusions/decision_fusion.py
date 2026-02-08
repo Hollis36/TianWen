@@ -6,6 +6,7 @@ This is a post-processing approach where VLM acts as a verifier/refiner.
 """
 
 import re
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -249,7 +250,6 @@ class DecisionFusion(BaseFusion):
             prompts.append(prompt)
 
         # Group detections by identical prompt to batch VLM calls
-        from collections import OrderedDict
         prompt_to_indices = OrderedDict()
         for i, prompt in enumerate(prompts):
             if prompt not in prompt_to_indices:
