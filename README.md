@@ -264,6 +264,126 @@ class MyFusion(BaseFusion):
 }
 ```
 
+## Troubleshooting
+
+### Common Issues
+
+#### ImportError: No module named 'tianwen'
+
+**Solution**: Install the package in development mode:
+```bash
+pip install -e .
+```
+
+#### CUDA Out of Memory
+
+**Solutions**:
+1. Reduce batch size in training config
+2. Use gradient accumulation:
+   ```bash
+   python tools/train.py train.batch_size=4 trainer.accumulate_grad_batches=4
+   ```
+3. Freeze VLM to reduce memory:
+   ```yaml
+   fusion:
+     freeze_vlm: true
+   ```
+4. Use mixed precision training (enabled by default)
+
+#### Model Loading Fails
+
+**Possible causes**:
+- Corrupted checkpoint file
+- Version mismatch between saved and current model
+- Missing model weights
+
+**Solutions**:
+1. Verify checkpoint integrity:
+   ```python
+   from tianwen.utils.checkpoint import get_checkpoint_info
+   info = get_checkpoint_info("path/to/checkpoint.pt")
+   print(info)
+   ```
+2. Use safe loading with verification:
+   ```python
+   from tianwen.utils.checkpoint import load_checkpoint
+   ckpt = load_checkpoint("path/to/checkpoint.pt", verify_hash=True)
+   ```
+3. Check for hash file (`.sha256`) if checkpoint was saved with integrity checking
+
+#### Dataset Not Found
+
+**Solutions**:
+1. Set `COCO_ROOT` environment variable:
+   ```bash
+   export COCO_ROOT=/path/to/coco
+   ```
+2. Or specify in config:
+   ```yaml
+   dataset:
+     root: /path/to/coco
+   ```
+3. Verify dataset structure:
+   ```
+   coco/
+   ├── annotations/
+   │   ├── instances_train2017.json
+   │   └── instances_val2017.json
+   └── images/
+       ├── train2017/
+       └── val2017/
+   ```
+
+#### Slow Training
+
+**Optimizations**:
+1. Use DataLoader num_workers:
+   ```yaml
+   dataset:
+     num_workers: 4
+     pin_memory: true
+   ```
+2. Enable compile (PyTorch 2.0+):
+   ```python
+   model = torch.compile(model)
+   ```
+3. Profile your code to find bottlenecks:
+   ```bash
+   python -m torch.utils.bottleneck tools/train.py
+   ```
+
+#### Configuration Errors
+
+**Solutions**:
+1. Validate your configuration:
+   ```python
+   from omegaconf import OmegaConf
+   cfg = OmegaConf.load("configs/config.yaml")
+   print(OmegaConf.to_yaml(cfg))
+   ```
+2. Check for typos in config group names
+3. Use experiment configs as templates:
+   ```bash
+   python tools/train.py experiment=yolov8_qwen_distill
+   ```
+
+### Getting Help
+
+- **Issues**: Report bugs at https://github.com/Hollis36/TianWen/issues
+- **Discussions**: Ask questions at https://github.com/Hollis36/TianWen/discussions
+- **Documentation**: Check `docs/` folder for detailed guides
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+Key areas for contribution:
+- Adding new detectors or VLMs
+- Implementing new fusion strategies
+- Improving documentation
+- Adding tests
+- Performance optimizations
+
 ## License
 
 Apache 2.0 License
