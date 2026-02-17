@@ -26,6 +26,44 @@ from tianwen.utils.hyperparameter import (
     create_common_search_space,
 )
 
+# Error handling and validation utilities
+from tianwen.utils.errors import (
+    TianWenError,
+    ConfigurationError,
+    ModelError,
+    ModelLoadError,
+    CheckpointError,
+    DataError,
+    DatasetError,
+    ValidationError,
+    FusionError,
+    RegistryError,
+    InferenceError,
+    ResourceError,
+    format_error_message,
+)
+
+from tianwen.utils.validation import (
+    validate_tensor_shape,
+    validate_image_tensor,
+    validate_boxes,
+    validate_labels,
+    validate_targets,
+    validate_checkpoint_path,
+    validate_dataset_path,
+    check_cuda_available,
+    check_memory_available,
+    validate_config_compatibility,
+)
+
+from tianwen.utils.checkpoint import (
+    load_checkpoint,
+    save_checkpoint,
+    load_state_dict_safe,
+    verify_checkpoint_hash,
+    get_checkpoint_info,
+)
+
 __all__ = [
     # Visualization
     "draw_boxes",
@@ -51,4 +89,35 @@ __all__ = [
     "HyperparameterSearch",
     "TrialResult",
     "create_common_search_space",
+    # Error classes
+    "TianWenError",
+    "ConfigurationError",
+    "ModelError",
+    "ModelLoadError",
+    "CheckpointError",
+    "DataError",
+    "DatasetError",
+    "ValidationError",
+    "FusionError",
+    "RegistryError",
+    "InferenceError",
+    "ResourceError",
+    "format_error_message",
+    # Validation
+    "validate_tensor_shape",
+    "validate_image_tensor",
+    "validate_boxes",
+    "validate_labels",
+    "validate_targets",
+    "validate_checkpoint_path",
+    "validate_dataset_path",
+    "check_cuda_available",
+    "check_memory_available",
+    "validate_config_compatibility",
+    # Checkpoint handling
+    "load_checkpoint",
+    "save_checkpoint",
+    "load_state_dict_safe",
+    "verify_checkpoint_hash",
+    "get_checkpoint_info",
 ]
