@@ -411,8 +411,9 @@ def validate_config_compatibility(
 
     # Check if current combination is valid
     for valid_det, valid_vlm in valid_pairs:
-        if (valid_det == "*" or valid_det == detector_type) and \
-           (valid_vlm == "*" or valid_vlm == vlm_type):
+        if (valid_det == "*" or valid_det == detector_type) and (
+            valid_vlm == "*" or valid_vlm == vlm_type
+        ):
             return
 
     raise ValidationError(
