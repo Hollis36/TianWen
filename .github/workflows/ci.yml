@@ -9,10 +9,16 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Limit permissions for security
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Code Quality Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +48,8 @@ jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ['3.9', '3.10', '3.11']
@@ -71,6 +79,8 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
