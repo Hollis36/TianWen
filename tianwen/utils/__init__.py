@@ -64,6 +64,18 @@ from tianwen.utils.checkpoint import (
     get_checkpoint_info,
 )
 
+# Logging utilities
+from tianwen.utils.logging import (
+    setup_logger,
+    get_logger,
+    log_config,
+    log_model_summary,
+    log_system_info,
+    configure_default_logger,
+    LoggerContext,
+    ProgressLogger,
+)
+
 __all__ = [
     # Visualization
     "draw_boxes",
@@ -120,4 +132,13 @@ __all__ = [
     "load_state_dict_safe",
     "verify_checkpoint_hash",
     "get_checkpoint_info",
+    # Logging
+    "setup_logger",
+    "get_logger",
+    "log_config",
+    "log_model_summary",
+    "log_system_info",
+    "configure_default_logger",
+    "LoggerContext",
+    "ProgressLogger",
 ]
