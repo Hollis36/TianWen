@@ -117,10 +117,10 @@ class KnowledgeDistillation(BaseFusion):
         self._det_feature_dim_override = det_feature_dim
 
         vlm_feature_dim = vlm.vision_hidden_size
-        resolved_det_dim = self._get_detector_feature_dim()
 
         # Mode-specific learnable modules
         if distill_mode == "feature":
+            resolved_det_dim = self._get_detector_feature_dim()
             self.feature_projector = FeatureProjector(
                 in_dim=resolved_det_dim,
                 out_dim=vlm_feature_dim,
@@ -381,7 +381,10 @@ class KnowledgeDistillation(BaseFusion):
             vlm_features = self.vlm.get_visual_features(images)  # [B, N, D]
 
         N_tokens = vlm_features.shape[1]
-        # Assume a square spatial layout for the token grid
+        # Assume a square spatial layout for the token grid.
+        # This holds for most ViT-based VLMs (e.g. 14×14 = 196 tokens for ViT-L/14).
+        # Non-square token grids (e.g. due to padding) will be silently truncated;
+        # if precise alignment is needed, pass the actual (H, W) from the VLM.
         H_feat = W_feat = int(N_tokens ** 0.5)
 
         all_losses: List[Tensor] = []

@@ -349,8 +349,8 @@ class DetectorVLMModule(pl.LightningModule):
         ious = self._box_iou(pred_boxes, gt_boxes)
 
         # Zero out entries where class labels don't match
-        label_match = pred_labels[:, None].eq(gt_labels[None, :])  # [N, M] bool
-        ious = ious * label_match.float()
+        label_matches_matrix = pred_labels[:, None].eq(gt_labels[None, :])  # [N, M] bool
+        ious = ious * label_matches_matrix.float()
 
         # For each prediction find its best available GT
         max_ious, best_gt_idx = ious.max(dim=1)  # [N], [N]
@@ -361,7 +361,7 @@ class DetectorVLMModule(pl.LightningModule):
         matched_gt = torch.zeros(len(gt_boxes), dtype=torch.bool, device=pred_boxes.device)
         matches = 0
 
-        for pred_idx in order.tolist():
+        for pred_idx in order:
             iou_val = max_ious[pred_idx].item()
             if iou_val < iou_threshold:
                 break  # All remaining predictions have lower IoU
