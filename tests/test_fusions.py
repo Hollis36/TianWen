@@ -168,7 +168,7 @@ class TestKnowledgeDistillationLogitMode:
             alpha=0.5,
         )
 
-    def test_feature_distill_loss_computation(self, fusion):
+    def test_logit_distill_loss_computation(self, fusion):
         """Logit distillation should return a finite scalar loss."""
         images = torch.randn(2, 3, 64, 64)
         targets = [

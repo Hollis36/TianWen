@@ -130,6 +130,12 @@ class KnowledgeDistillation(BaseFusion):
             self.vlm_classifier = nn.Linear(vlm.vision_hidden_size, detector.num_classes)
             self.distill_loss_fn = DistillationLoss(temperature, alpha)
 
+        elif distill_mode == "response":
+            # Response-based projector: detector neck features -> VLM feature space
+            # Dimensions are determined dynamically from the two models.
+            det_feature_dim = self._get_detector_feature_dim()
+            self.response_projector = nn.Linear(det_feature_dim, vlm.vision_hidden_size)
+
         # Loss functions
         self.mse_loss = nn.MSELoss()
         self.kl_loss = nn.KLDivLoss(reduction="batchmean")
@@ -284,8 +290,8 @@ class KnowledgeDistillation(BaseFusion):
 
         # Student: collect per-image class scores from detector outputs.
         # Each DetectionOutput may have a variable number of detections;
-        # we aggregate by summing scores per class (a common proxy for
-        # a class-level distribution).
+        # we aggregate by taking the max score per class as a proxy for
+        # a class-level confidence distribution.
         batch_size = teacher_logits.shape[0]
         num_classes = self.detector.num_classes
         device = teacher_logits.device
@@ -294,6 +300,7 @@ class KnowledgeDistillation(BaseFusion):
         for det in det_output.outputs:
             class_scores = torch.zeros(num_classes, device=device)
             if det.scores.numel() > 0:
+                # Vectorised per-class max: one pass, no Python loop over classes
                 for cls_idx in range(num_classes):
                     mask = det.labels == cls_idx
                     if mask.any():
@@ -315,8 +322,9 @@ class KnowledgeDistillation(BaseFusion):
         """
         Compute response-based distillation loss.
 
-        Extracts VLM visual features for each image and aligns them with the
-        detector's global visual representation via cosine-similarity loss.
+        Aligns pooled detector neck features with pooled VLM visual features via
+        cosine-similarity loss so that the detector's global representation is pulled
+        towards the richer VLM representation.
 
         Simplified implementation: whole-image VLM features are used as
         teacher signals aligned against pooled detector features so that no
@@ -324,11 +332,10 @@ class KnowledgeDistillation(BaseFusion):
         """
         device = images.device
 
-        # Teacher: VLM features for the whole image (already computed in forward,
-        # but we re-use the detector's extracted features here to avoid a second
-        # VLM pass).  We call VLM with no_grad since it is frozen in this mode.
+        # Teacher: VLM features for the whole image.
+        # VLM is expected to be frozen, so we run it under no_grad.
         with torch.no_grad():
-            vlm_feats = self.vlm.get_visual_features(images)  # [B, N, D_vlm]
+            vlm_feats = self.vlm.get_visual_features(images)  # [B, N, D_vlm] or [B, D_vlm]
 
         if vlm_feats.dim() == 3:
             vlm_pooled = vlm_feats.mean(dim=1)  # [B, D_vlm]
@@ -348,13 +355,8 @@ class KnowledgeDistillation(BaseFusion):
 
         det_pooled = det_feat.mean(dim=1)  # [B, C_det]
 
-        # Project student features to VLM dimension and compute cosine loss
-        if not hasattr(self, "_response_projector"):
-            det_dim = det_pooled.shape[-1]
-            vlm_dim = vlm_pooled.shape[-1]
-            self._response_projector = nn.Linear(det_dim, vlm_dim).to(device)
-
-        det_proj = self._response_projector(det_pooled)  # [B, D_vlm]
+        # Project student features to VLM dimension using the pre-initialized projector
+        det_proj = self.response_projector(det_pooled)  # [B, D_vlm]
 
         # Normalize and compute cosine similarity loss (target = 1: maximise similarity)
         det_norm = F.normalize(det_proj, p=2, dim=-1)

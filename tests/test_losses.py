@@ -142,7 +142,7 @@ class TestFocalLoss:
 class TestCombinedDetectionLoss:
     """Tests for CombinedDetectionLoss."""
 
-    def _make_inputs(self, batch=4, num_classes=10, use_focal=True):
+    def _make_inputs(self, batch=4, num_classes=10):
         cls_preds = torch.randn(batch, num_classes)
         box_preds = torch.randn(batch, 4)
         obj_preds = torch.randn(batch, 1)
