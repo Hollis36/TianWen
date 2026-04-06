@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tianwen"
-version = "0.1.0"
+version = "0.2.0"
 description = "A universal training framework for combining object detection with Vision-Language Models"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -28,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -47,7 +48,13 @@ dependencies = [
     "wandb>=0.15.0",
     "tensorboard>=2.14.0",
     "rich>=13.0.0",
+    "torchmetrics>=1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Hollis36/TianWen"
+Repository = "https://github.com/Hollis36/TianWen"
+Issues = "https://github.com/Hollis36/TianWen/issues"
 
 [project.optional-dependencies]
 dev = [

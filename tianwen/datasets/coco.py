@@ -92,7 +92,14 @@ class COCODataset(BaseDataset):
 
         # Load image info
         img_info = self.coco.imgs[image_id]
-        image_path = self.image_dir / img_info["file_name"]
+        file_name = img_info["file_name"]
+
+        # Guard against path-traversal sequences (e.g. "../../etc/passwd")
+        if ".." in Path(file_name).parts:
+            raise ValueError(
+                f"Invalid file_name in annotation: {file_name!r} contains path-traversal components."
+            )
+        image_path = self.image_dir / file_name
 
         # Load image
         image = Image.open(image_path).convert("RGB")

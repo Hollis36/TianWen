@@ -17,6 +17,7 @@ from tianwen.core.registry import FUSIONS
 from tianwen.detectors.base import BaseDetector, DetectionOutput, BatchDetectionOutput
 from tianwen.vlms.base import BaseVLM
 from tianwen.fusions.base import BaseFusion, FusionOutput
+from tianwen.engine.losses import DistillationLoss
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ class KnowledgeDistillation(BaseFusion):
         freeze_vlm: bool = True,
         freeze_detector: bool = False,
         projector_hidden_dim: Optional[int] = None,
+        det_feature_dim: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -97,6 +99,8 @@ class KnowledgeDistillation(BaseFusion):
             freeze_vlm: Whether to freeze VLM (recommended: True)
             freeze_detector: Whether to freeze detector
             projector_hidden_dim: Hidden dimension for feature projector
+            det_feature_dim: Detector neck/backbone feature dimension.
+                If None, it is inferred automatically with a fallback of 512.
         """
         super().__init__(
             detector=detector,
@@ -110,30 +114,72 @@ class KnowledgeDistillation(BaseFusion):
         self.alpha = alpha
         self.feature_loss_weight = feature_loss_weight
         self.det_loss_weight = det_loss_weight
+        self._det_feature_dim_override = det_feature_dim
 
-        # Feature projector for aligning detector and VLM features
+        vlm_feature_dim = vlm.vision_hidden_size
+        resolved_det_dim = self._get_detector_feature_dim()
+
+        # Mode-specific learnable modules
         if distill_mode == "feature":
-            # Get feature dimensions
-            # Detector feature dim (from neck/backbone)
-            det_feature_dim = self._get_detector_feature_dim()
-            vlm_feature_dim = vlm.vision_hidden_size
-
             self.feature_projector = FeatureProjector(
-                in_dim=det_feature_dim,
+                in_dim=resolved_det_dim,
                 out_dim=vlm_feature_dim,
                 hidden_dim=projector_hidden_dim,
             )
 
-        # Loss functions
+        elif distill_mode == "logit":
+            # Learnable classification head: maps pooled VLM features → class logits
+            self.vlm_cls_head = nn.Linear(vlm_feature_dim, detector.num_classes)
+            self.distill_loss_fn = DistillationLoss(
+                temperature=temperature, alpha=alpha
+            )
+
+        elif distill_mode == "response":
+            # Learnable head for region-level cross-modal alignment
+            self.response_cls_head = nn.Linear(vlm_feature_dim, detector.num_classes)
+
+        # Shared loss functions
         self.mse_loss = nn.MSELoss()
         self.kl_loss = nn.KLDivLoss(reduction="batchmean")
         self.cos_loss = nn.CosineEmbeddingLoss()
 
     def _get_detector_feature_dim(self) -> int:
-        """Get the feature dimension from the detector."""
-        # This is a heuristic - actual dimension depends on detector
-        # For YOLO, neck features are typically 256/512/1024
-        return 512  # Default, can be overridden
+        """Get the feature dimension from the detector.
+
+        Checks the following in order:
+        1. The explicit ``det_feature_dim`` constructor argument.
+        2. Common attribute names on the detector object.
+        3. Introspection of the last Conv2d layer in the detector's neck/backbone.
+        4. A fallback default of 512 with a warning.
+        """
+        if self._det_feature_dim_override is not None:
+            return int(self._det_feature_dim_override)
+
+        detector = self.detector
+
+        # Check common explicit attributes
+        for attr in ("neck_feature_dim", "feature_dim", "hidden_size"):
+            if hasattr(detector, attr):
+                return int(getattr(detector, attr))
+
+        # Try to introspect the underlying torch model (YOLO / RT-DETR style)
+        if hasattr(detector, "_torch_model"):
+            try:
+                model = detector._torch_model
+                layers = list(model.model)
+                # Walk the neck layers (indices 10-23 for typical YOLO8/11)
+                for layer in reversed(layers[9:24]):
+                    for m in layer.modules():
+                        if isinstance(m, nn.Conv2d):
+                            return m.out_channels
+            except (AttributeError, IndexError, TypeError):
+                pass
+
+        logger.warning(
+            "Could not determine detector feature dimension dynamically; "
+            "defaulting to 512. Pass det_feature_dim explicitly to override."
+        )
+        return 512
 
     def forward(
         self,
@@ -261,16 +307,46 @@ class KnowledgeDistillation(BaseFusion):
         """
         Compute logit-level distillation loss.
 
-        Uses VLM features to generate soft class labels.
-        """
-        # TODO: Implement actual logit-level distillation:
-        # 1. VLM generating class probabilities
-        # 2. Softening with temperature
-        # 3. KL divergence with detector predictions
-        logger.warning("Using placeholder logit distillation loss (returns zero). Implement _compute_logit_distill_loss() for real training.")
+        The VLM's pooled visual features are mapped to soft class-probability
+        distributions via a learnable linear head (teacher).  The detector's
+        per-image detection scores are accumulated into a class histogram and
+        used as the student distribution.  KL divergence (with temperature
+        scaling, as in Hinton et al. 2015) is then computed between the two.
 
+        Args:
+            det_output: Batch detection output from the student detector.
+            vlm_features: VLM visual features ``[B, N, D]``.
+
+        Returns:
+            Scalar distillation loss tensor.
+        """
         device = vlm_features.device
-        return torch.tensor(0.0, device=device, requires_grad=True)
+        batch_size = vlm_features.shape[0]
+        num_classes = self.detector.num_classes
+
+        # --- Teacher: VLM features → soft class logits ---
+        # Global average pool over the token dimension: [B, N, D] → [B, D]
+        vlm_pooled = vlm_features.mean(dim=1)
+        teacher_logits = self.vlm_cls_head(vlm_pooled)  # [B, num_classes]
+
+        # --- Student: build per-image class score histogram ---
+        student_logits = torch.zeros(batch_size, num_classes, device=device)
+        for i, det in enumerate(det_output.outputs):
+            if det.labels.numel() > 0:
+                valid = det.labels < num_classes
+                labels = det.labels[valid]
+                scores = det.scores[valid]
+                student_logits[i].scatter_add_(
+                    0, labels, scores.to(student_logits.dtype)
+                )
+
+        # --- Temperature-scaled KL divergence (Hinton et al., 2015) ---
+        T = self.temperature
+        soft_student = F.log_softmax(student_logits / T, dim=-1)
+        soft_teacher = F.softmax(teacher_logits / T, dim=-1)
+
+        # Scale by T² as per the original distillation paper
+        return self.kl_loss(soft_student, soft_teacher) * (T ** 2)
 
     def _compute_response_distill_loss(
         self,
@@ -281,15 +357,71 @@ class KnowledgeDistillation(BaseFusion):
         """
         Compute response-based distillation loss.
 
-        Uses VLM text responses to guide detector training.
-        """
-        # TODO: Implement actual response-based distillation:
-        # 1. Generate VLM descriptions of ground truth
-        # 2. Compare with detector predictions
-        # 3. Compute consistency loss
-        logger.warning("Using placeholder response distillation loss (returns zero). Implement _compute_response_distill_loss() for real training.")
+        For each ground-truth bounding box we extract the corresponding
+        spatial region from the VLM's visual feature map and supervise the
+        class label with cross-entropy.  This realises a CLIP-style
+        region-level alignment where the VLM spatial features act as rich
+        semantic representations of each detected area.
 
+        Args:
+            images: Input images ``[B, C, H, W]``.
+            det_output: Batch detection output (unused labels; GT labels used
+                from *targets*).
+            targets: List of per-image GT dicts with keys ``"boxes"``
+                (xyxy, float) and ``"labels"`` (long).
+
+        Returns:
+            Scalar cross-entropy loss averaged over all GT regions.
+        """
         device = images.device
+        B, _, H_img, W_img = images.shape
+        num_classes = self.detector.num_classes
+
+        with torch.no_grad():
+            vlm_features = self.vlm.get_visual_features(images)  # [B, N, D]
+
+        N_tokens = vlm_features.shape[1]
+        # Assume a square spatial layout for the token grid
+        H_feat = W_feat = int(N_tokens ** 0.5)
+
+        all_losses: List[Tensor] = []
+
+        for i in range(B):
+            gt_boxes = targets[i]["boxes"]    # [K, 4] xyxy
+            gt_labels = targets[i]["labels"]  # [K]
+
+            if gt_boxes.numel() == 0:
+                continue
+
+            # Reshape VLM features for this image to a 2-D spatial grid
+            feat_grid = vlm_features[i].reshape(H_feat, W_feat, -1)  # [H, W, D]
+
+            for j in range(len(gt_boxes)):
+                x1, y1, x2, y2 = gt_boxes[j]
+                label = gt_labels[j]
+
+                if label >= num_classes:
+                    continue
+
+                # Map box coordinates to feature-grid indices (clamped)
+                fx1 = int((x1 / W_img * W_feat).clamp(0, W_feat - 1).item())
+                fy1 = int((y1 / H_img * H_feat).clamp(0, H_feat - 1).item())
+                fx2 = int((x2 / W_img * W_feat).clamp(fx1 + 1, W_feat).item())
+                fy2 = int((y2 / H_img * H_feat).clamp(fy1 + 1, H_feat).item())
+
+                # Average-pool the region features
+                roi_feat = feat_grid[fy1:fy2, fx1:fx2].mean(dim=(0, 1))  # [D]
+
+                # Project to class logits and compute cross-entropy
+                logit = self.response_cls_head(roi_feat.to(device))  # [num_classes]
+                loss = F.cross_entropy(
+                    logit.unsqueeze(0),
+                    label.unsqueeze(0).to(device),
+                )
+                all_losses.append(loss)
+
+        if all_losses:
+            return torch.stack(all_losses).mean()
         return torch.tensor(0.0, device=device, requires_grad=True)
 
     def compute_loss(
@@ -319,6 +451,7 @@ class MutualDistillation(BaseFusion):
         vlm_to_det_weight: float = 0.7,
         freeze_vlm: bool = False,  # VLM also trained
         freeze_detector: bool = False,
+        det_dim: Optional[int] = None,
         **kwargs,
     ):
         super().__init__(
@@ -332,12 +465,40 @@ class MutualDistillation(BaseFusion):
         self.det_to_vlm_weight = det_to_vlm_weight
         self.vlm_to_det_weight = vlm_to_det_weight
 
-        # Bidirectional projectors
-        det_dim = 512  # Placeholder
+        # Resolve detector feature dimension
+        if det_dim is not None:
+            resolved_det_dim = int(det_dim)
+        else:
+            resolved_det_dim = self._resolve_det_dim(detector)
+
         vlm_dim = vlm.vision_hidden_size
 
-        self.det_to_vlm_proj = FeatureProjector(det_dim, vlm_dim)
-        self.vlm_to_det_proj = FeatureProjector(vlm_dim, det_dim)
+        self.det_to_vlm_proj = FeatureProjector(resolved_det_dim, vlm_dim)
+        self.vlm_to_det_proj = FeatureProjector(vlm_dim, resolved_det_dim)
+
+    @staticmethod
+    def _resolve_det_dim(detector: BaseDetector) -> int:
+        """Resolve the detector feature dimension using the same heuristics
+        as :class:`KnowledgeDistillation._get_detector_feature_dim`."""
+        for attr in ("neck_feature_dim", "feature_dim", "hidden_size"):
+            if hasattr(detector, attr):
+                return int(getattr(detector, attr))
+
+        if hasattr(detector, "_torch_model"):
+            try:
+                model = detector._torch_model
+                for layer in reversed(list(model.model)[9:24]):
+                    for m in layer.modules():
+                        if isinstance(m, nn.Conv2d):
+                            return m.out_channels
+            except (AttributeError, IndexError, TypeError):
+                pass
+
+        logger.warning(
+            "MutualDistillation: could not determine detector feature dimension; "
+            "defaulting to 512. Pass det_dim explicitly to override."
+        )
+        return 512
 
     def forward(
         self,

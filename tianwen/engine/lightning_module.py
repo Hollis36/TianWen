@@ -21,6 +21,12 @@ except ImportError:
         "pytorch-lightning is required. Install with: pip install pytorch-lightning"
     )
 
+try:
+    from torchmetrics.detection import MeanAveragePrecision as _MeanAveragePrecision
+    _HAS_TORCHMETRICS_MAP = True
+except ImportError:
+    _HAS_TORCHMETRICS_MAP = False
+
 from tianwen.core.registry import DETECTORS, VLMS, FUSIONS
 from tianwen.detectors.base import BaseDetector
 from tianwen.vlms.base import BaseVLM
@@ -109,6 +115,16 @@ class DetectorVLMModule(pl.LightningModule):
         self._train_losses = []
         self._val_metrics = {}
 
+        # Optional torchmetrics mAP (provides mAP@50, mAP@50:95, etc.)
+        if _HAS_TORCHMETRICS_MAP:
+            self.val_map = _MeanAveragePrecision(iou_type="bbox", box_format="xyxy")
+        else:
+            self.val_map = None
+            logger.info(
+                "torchmetrics not found; falling back to simple precision/recall metrics. "
+                "Install with: pip install torchmetrics"
+            )
+
         logger.info(f"Initialized DetectorVLMModule with fusion: {fusion_cfg.get('type')}")
         self._log_model_info()
 
@@ -195,7 +211,27 @@ class DetectorVLMModule(pl.LightningModule):
         # Forward pass
         outputs = self.forward(images, targets)
 
-        # Compute detection metrics
+        # Update torchmetrics mAP (if available)
+        if self.val_map is not None:
+            det_output = outputs.detection_output
+            map_preds = [
+                {
+                    "boxes": pred.boxes,
+                    "scores": pred.scores,
+                    "labels": pred.labels,
+                }
+                for pred in det_output.outputs
+            ]
+            map_targets = [
+                {
+                    "boxes": t["boxes"],
+                    "labels": t["labels"],
+                }
+                for t in targets
+            ]
+            self.val_map.update(map_preds, map_targets)
+
+        # Compute simple detection metrics (always computed for prog_bar)
         metrics = self._compute_detection_metrics(outputs, targets)
 
         # Log metrics
@@ -218,6 +254,23 @@ class DetectorVLMModule(pl.LightningModule):
     ) -> STEP_OUTPUT:
         """Test step."""
         return self.validation_step(batch, batch_idx)
+
+    def on_validation_epoch_end(self) -> None:
+        """Compute and log epoch-level validation metrics."""
+        if self.val_map is not None:
+            try:
+                map_metrics = self.val_map.compute()
+                self.log("val/mAP", map_metrics["map"], prog_bar=True)
+                self.log("val/mAP_50", map_metrics["map_50"], prog_bar=True)
+                self.log("val/mAP_75", map_metrics["map_75"])
+                if "map_small" in map_metrics:
+                    self.log("val/mAP_small", map_metrics["map_small"])
+                if "map_medium" in map_metrics:
+                    self.log("val/mAP_medium", map_metrics["map_medium"])
+                if "map_large" in map_metrics:
+                    self.log("val/mAP_large", map_metrics["map_large"])
+            finally:
+                self.val_map.reset()
 
     def _compute_detection_metrics(
         self,
@@ -282,31 +335,40 @@ class DetectorVLMModule(pl.LightningModule):
         gt_labels: Tensor,
         iou_threshold: float = 0.5,
     ) -> int:
-        """Count matching predictions."""
+        """Count matching predictions using vectorized IoU computation.
+
+        The inner O(M) Python loop from the naïve implementation is replaced
+        by a single vectorised label-masked IoU matrix.  The remaining O(N)
+        loop performs greedy matching (each GT matched at most once) and
+        is unavoidable without a full Hungarian solver.
+        """
         if len(pred_boxes) == 0 or len(gt_boxes) == 0:
             return 0
 
-        # Compute IoU matrix
+        # Compute full IoU matrix [N, M] in one go
         ious = self._box_iou(pred_boxes, gt_boxes)
 
+        # Zero out entries where class labels don't match
+        label_match = pred_labels[:, None].eq(gt_labels[None, :])  # [N, M] bool
+        ious = ious * label_match.float()
+
+        # For each prediction find its best available GT
+        max_ious, best_gt_idx = ious.max(dim=1)  # [N], [N]
+
+        # Sort predictions by their best IoU (descending) for greedy matching
+        order = max_ious.argsort(descending=True)
+
+        matched_gt = torch.zeros(len(gt_boxes), dtype=torch.bool, device=pred_boxes.device)
         matches = 0
-        matched_gt = set()
 
-        for i in range(len(pred_boxes)):
-            best_iou = 0
-            best_j = -1
-
-            for j in range(len(gt_boxes)):
-                if j in matched_gt:
-                    continue
-
-                if ious[i, j] > best_iou and pred_labels[i] == gt_labels[j]:
-                    best_iou = ious[i, j]
-                    best_j = j
-
-            if best_iou >= iou_threshold:
+        for pred_idx in order.tolist():
+            iou_val = max_ious[pred_idx].item()
+            if iou_val < iou_threshold:
+                break  # All remaining predictions have lower IoU
+            gt_idx = best_gt_idx[pred_idx].item()
+            if not matched_gt[gt_idx]:
+                matched_gt[gt_idx] = True
                 matches += 1
-                matched_gt.add(best_j)
 
         return matches
 

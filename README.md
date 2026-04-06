@@ -1,5 +1,9 @@
 # TianWen 天问
 
+[![CI](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml/badge.svg)](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+
 **A Universal Training Framework for Detection-VLM Fusion**
 
 TianWen is a modular, extensible framework for combining object detection models with Vision-Language Models (VLMs) to improve detection performance through various fusion strategies.
@@ -19,8 +23,8 @@ TianWen is a modular, extensible framework for combining object detection models
 
 ```bash
 # Clone repository
-git clone https://github.com/tianwen-framework/tianwen.git
-cd tianwen
+git clone https://github.com/Hollis36/TianWen.git
+cd TianWen
 
 # Install core dependencies
 pip install -e .
@@ -254,16 +258,65 @@ class MyFusion(BaseFusion):
 - ultralytics >= 8.3
 - hydra-core >= 1.3
 
+## Experimental Results
+
+> **Note**: Results below are template placeholders. Replace with actual benchmark numbers from your experiments.
+
+### COCO val2017 — mAP Comparison
+
+| Model | Backbone | mAP@50 | mAP@50:95 | FPS | Params |
+|-------|----------|--------|-----------|-----|--------|
+| YOLOv8-L (baseline) | CSPDarkNet | — | — | — | 43.7M |
+| YOLOv8-L + VLM Distill (feature) | CSPDarkNet + Qwen2-VL | — | — | — | 44.1M |
+| YOLOv8-L + VLM Distill (logit) | CSPDarkNet + Qwen2-VL | — | — | — | 44.0M |
+| RT-DETR-L (baseline) | ResNet-50 | — | — | — | 32.7M |
+| RT-DETR-L + VLM Distill (feature) | ResNet-50 + Qwen2-VL | — | — | — | 33.2M |
+
+## Architecture Overview
+
+```
+Input Images
+     │
+     ├──────────────────────────────┐
+     ▼                              ▼
+┌─────────────┐             ┌─────────────────┐
+│  Detector   │             │      VLM        │
+│ (Student)   │             │   (Teacher)     │
+│             │             │                 │
+│  Backbone   │             │  Vision Encoder │
+│     │       │             │       │         │
+│   Neck      │             │  Token Features │
+│     │       │             │   [B, N, D]     │
+│   Head      │             └────────┬────────┘
+│     │       │                      │ (frozen in KD)
+└──┬──┴───────┘                      │
+   │  features/logits                │
+   │  [B, C, H, W]                   │
+   └─────────────┬────────────────────┘
+                 ▼
+         ┌──────────────┐
+         │  Fusion      │
+         │  Module      │
+         │  ─────────── │
+         │  - Feature   │
+         │  - Logit     │
+         │  - Response  │
+         └──────┬───────┘
+                │
+                ▼
+          Loss + Outputs
+```
+
 ## Citation
 
 ```bibtex
 @software{tianwen2024,
   title = {TianWen: A Universal Training Framework for Detection-VLM Fusion},
   year = {2024},
-  url = {https://github.com/tianwen-framework/tianwen}
+  url = {https://github.com/Hollis36/TianWen}
 }
 ```
 
 ## License
 
-Apache 2.0 License
+Apache 2.0 License — see [LICENSE](LICENSE) for details.
