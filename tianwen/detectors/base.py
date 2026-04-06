@@ -90,6 +90,10 @@ class BaseDetector(ABC, nn.Module):
         backbone_frozen: Whether the backbone is frozen
     """
 
+    #: Default feature dimension for the detector neck/backbone output.
+    #: Subclasses should override this attribute with the correct value.
+    feature_dim: int = 512
+
     def __init__(
         self,
         num_classes: int,

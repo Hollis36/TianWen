@@ -92,7 +92,11 @@ class COCODataset(BaseDataset):
 
         # Load image info
         img_info = self.coco.imgs[image_id]
-        image_path = self.image_dir / img_info["file_name"]
+        file_name = img_info["file_name"]
+        # Guard against path traversal attacks
+        if ".." in file_name or file_name.startswith("/"):
+            raise ValueError(f"Invalid file name in annotation: {file_name!r}")
+        image_path = self.image_dir / file_name
 
         # Load image
         image = Image.open(image_path).convert("RGB")
