@@ -26,6 +26,13 @@ from tianwen.detectors.base import BaseDetector
 from tianwen.vlms.base import BaseVLM
 from tianwen.fusions.base import BaseFusion, FusionOutput
 
+try:
+    from torchmetrics.detection import MeanAveragePrecision
+
+    _TORCHMETRICS_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TORCHMETRICS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -108,6 +115,16 @@ class DetectorVLMModule(pl.LightningModule):
         # Metrics tracking
         self._train_losses = []
         self._val_metrics = {}
+
+        # Standard mAP metric (torchmetrics)
+        if _TORCHMETRICS_AVAILABLE:
+            self.map_metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
+        else:
+            self.map_metric = None
+            logger.warning(
+                "torchmetrics not installed — mAP@50/50:95 will not be computed. "
+                "Install with: pip install torchmetrics>=1.0.0"
+            )
 
         logger.info(f"Initialized DetectorVLMModule with fusion: {fusion_cfg.get('type')}")
         self._log_model_info()
@@ -198,6 +215,11 @@ class DetectorVLMModule(pl.LightningModule):
         # Compute detection metrics
         metrics = self._compute_detection_metrics(outputs, targets)
 
+        # Update mAP metric with torchmetrics-compatible dicts
+        if self.map_metric is not None:
+            preds, gt = self._format_for_map(outputs, targets)
+            self.map_metric.update(preds, gt)
+
         # Log metrics
         for name, value in metrics.items():
             self.log(
@@ -218,6 +240,48 @@ class DetectorVLMModule(pl.LightningModule):
     ) -> STEP_OUTPUT:
         """Test step."""
         return self.validation_step(batch, batch_idx)
+
+    def on_validation_epoch_end(self) -> None:
+        """Compute and log epoch-level mAP metrics."""
+        if self.map_metric is not None:
+            map_results = self.map_metric.compute()
+            self.log("val/mAP50", map_results.get("map_50", torch.tensor(0.0)), prog_bar=True)
+            self.log(
+                "val/mAP50_95", map_results.get("map", torch.tensor(0.0)), prog_bar=True
+            )
+            self.map_metric.reset()
+
+    def _format_for_map(
+        self,
+        outputs: FusionOutput,
+        targets: List[Dict[str, Tensor]],
+    ) -> Tuple[List[Dict[str, Tensor]], List[Dict[str, Tensor]]]:
+        """
+        Format model outputs and targets for torchmetrics MeanAveragePrecision.
+
+        Returns:
+            Tuple of (preds, gts) where each element is a list of dicts.
+        """
+        det_output = outputs.detection_output
+        preds = []
+        gts = []
+
+        for pred, target in zip(det_output.outputs, targets):
+            preds.append(
+                {
+                    "boxes": pred.boxes.cpu(),
+                    "scores": pred.scores.cpu(),
+                    "labels": pred.labels.cpu(),
+                }
+            )
+            gts.append(
+                {
+                    "boxes": target["boxes"].cpu(),
+                    "labels": target["labels"].cpu(),
+                }
+            )
+
+        return preds, gts
 
     def _compute_detection_metrics(
         self,
@@ -282,31 +346,31 @@ class DetectorVLMModule(pl.LightningModule):
         gt_labels: Tensor,
         iou_threshold: float = 0.5,
     ) -> int:
-        """Count matching predictions."""
+        """Count matching predictions using vectorized greedy matching."""
         if len(pred_boxes) == 0 or len(gt_boxes) == 0:
             return 0
 
-        # Compute IoU matrix
+        # IoU matrix [N_pred, N_gt]
         ious = self._box_iou(pred_boxes, gt_boxes)
 
+        # Mask out label mismatches
+        label_match = pred_labels[:, None] == gt_labels[None, :]  # [N_pred, N_gt]
+        ious = ious * label_match.float()
+
         matches = 0
-        matched_gt = set()
+        matched_gt = torch.zeros(len(gt_boxes), dtype=torch.bool, device=ious.device)
 
+        # Greedy: process predictions in descending score order (if available,
+        # otherwise just iterate in order)
         for i in range(len(pred_boxes)):
-            best_iou = 0
-            best_j = -1
+            # Zero out already-matched GTs
+            row = ious[i].clone()
+            row[matched_gt] = 0.0
 
-            for j in range(len(gt_boxes)):
-                if j in matched_gt:
-                    continue
-
-                if ious[i, j] > best_iou and pred_labels[i] == gt_labels[j]:
-                    best_iou = ious[i, j]
-                    best_j = j
-
-            if best_iou >= iou_threshold:
+            best_iou, best_j = row.max(dim=0)
+            if best_iou.item() >= iou_threshold:
                 matches += 1
-                matched_gt.add(best_j)
+                matched_gt[best_j] = True
 
         return matches
 

@@ -1,5 +1,9 @@
 # TianWen 天问
 
+[![CI](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml/badge.svg)](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+
 **A Universal Training Framework for Detection-VLM Fusion**
 
 TianWen is a modular, extensible framework for combining object detection models with Vision-Language Models (VLMs) to improve detection performance through various fusion strategies.
@@ -19,8 +23,8 @@ TianWen is a modular, extensible framework for combining object detection models
 
 ```bash
 # Clone repository
-git clone https://github.com/tianwen-framework/tianwen.git
-cd tianwen
+git clone https://github.com/Hollis36/TianWen.git
+cd TianWen
 
 # Install core dependencies
 pip install -e .
@@ -254,13 +258,36 @@ class MyFusion(BaseFusion):
 - ultralytics >= 8.3
 - hydra-core >= 1.3
 
+## Benchmark Results
+
+| Method | Backbone | mAP@50 | mAP@50:95 | FPS |
+|--------|----------|--------|-----------|-----|
+| YOLOv8-L (baseline) | CSPDarknet | - | - | - |
+| YOLOv8-L + Qwen2-VL (distill) | CSPDarknet | - | - | - |
+
+> Results will be updated as experiments are completed.
+
+## Architecture Overview
+
+```mermaid
+flowchart LR
+    IMG[Input Image] --> DET[Detector\nYOLOv8 / RT-DETR / ...]
+    IMG --> VLM[VLM\nQwen2-VL / InternVL3]
+    DET -- features / logits --> FUSE{Fusion Strategy}
+    VLM -- visual features --> FUSE
+    FUSE -->|distillation| DET_OUT[Improved Detector]
+    FUSE -->|feature fusion| DET_OUT
+    FUSE -->|decision fusion| DET_OUT
+    DET_OUT --> PRED[Predictions]
+```
+
 ## Citation
 
 ```bibtex
 @software{tianwen2024,
   title = {TianWen: A Universal Training Framework for Detection-VLM Fusion},
   year = {2024},
-  url = {https://github.com/tianwen-framework/tianwen}
+  url = {https://github.com/Hollis36/TianWen}
 }
 ```
 
