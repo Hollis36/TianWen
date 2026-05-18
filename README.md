@@ -1,195 +1,77 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/Hollis36/tianwen-project-page/main/public/favicon.svg" width="92" alt="TianWen logo" />
+
 # TianWen 天问
 
+**Plug Vision-Language Models into your object detector — in one config file.**
+
 [![CI](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml/badge.svg)](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9_|_3.10_|_3.11_|_3.12-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache_2.0-green)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Hollis36/TianWen?style=social)](https://github.com/Hollis36/TianWen/stargazers)
+[![Status](https://img.shields.io/badge/status-alpha-orange)]()
 
-**A Universal Training Framework for Detection-VLM Fusion**
+[🌐 **Project page**](https://hollis36.github.io/tianwen-project-page/) · [⚡ Quickstart](#-quickstart) · [🧩 Examples](configs/experiment/) · [💬 Discussions](https://github.com/Hollis36/TianWen/discussions) · [🗺️ Roadmap](#%EF%B8%8F-roadmap)
 
-TianWen is a modular, extensible framework for combining object detection models with Vision-Language Models (VLMs) to improve detection performance through various fusion strategies.
+</div>
 
-## Features
+---
 
-- **Multiple Detector Support**: YOLOv8, YOLOv11, RT-DETR, RF-DETR, Grounding-DINO
-- **Multiple VLM Support**: Qwen2-VL, InternVL3
-- **Flexible Fusion Strategies**:
-  - Knowledge Distillation: VLM as teacher, detector as student
-  - Feature Fusion: Inject VLM features into detector
-  - Decision Fusion: VLM verifies/refines detection results
-- **Easy Configuration**: Hydra-based hierarchical configs
-- **Scalable Training**: PyTorch Lightning with multi-GPU support
+## Why TianWen?
 
-## Installation
+Most VLM-enhanced detection projects glue Vision-Language Models and detectors together with one-off scripts. TianWen treats the **fusion** as a first-class, swappable layer:
+
+- 🔌 **Pluggable** — Register a detector, register a VLM, pick a fusion strategy. Mix and match without rewriting your training loop.
+- ⚡ **Lightning-native** — Built on PyTorch Lightning + Hydra. Multi-GPU, mixed precision, callbacks, logging come for free.
+- 🎯 **Train-time intelligence, deploy-time speed** — Distill VLM knowledge into a fast detector during training; ship just the detector.
+- 🧪 **Three battle-tested strategies** — Knowledge distillation, feature fusion, and decision-level verification, covering the practical design space.
+
+> **Status: alpha.** Interfaces may shift. Benchmarks coming — see [Roadmap](#%EF%B8%8F-roadmap).
+
+## ⚡ Quickstart
 
 ```bash
-# Clone repository
+# 1. Clone & install
 git clone https://github.com/Hollis36/TianWen.git
 cd TianWen
-
-# Install core dependencies
 pip install -e .
 
-# Install with development tools
-pip install -e ".[dev]"
-
-# Install with RF-DETR support (requires special installation)
-pip install -e ".[rfdetr]"
-
-# Install Grounding-DINO (from source)
-# pip install groundingdino
-# Or use the autodistill wrapper:
-# pip install autodistill-grounding-dino
-```
-
-## Quick Start
-
-### Training
-
-```bash
-# Train with default configuration
-python tools/train.py
-
-# Train with specific experiment
+# 2. Train with a pre-defined recipe (YOLOv8-L + Qwen2-VL-7B + feature distillation)
 python tools/train.py experiment=yolov8_qwen_distill
 
-# Override parameters
-python tools/train.py \
-    detector=yolov8 \
-    vlm=qwen_vl \
-    fusion=distillation \
-    train.learning_rate=1e-4 \
-    train.batch_size=16
-```
-
-### Evaluation
-
-```bash
-python tools/eval.py checkpoint=path/to/checkpoint.ckpt
-```
-
-### Inference
-
-```bash
+# 3. Run inference with the trained detector
 python tools/demo.py \
-    --checkpoint path/to/checkpoint.ckpt \
-    --image path/to/image.jpg \
+    --checkpoint runs/yolov8l_qwen2vl_distill/last.ckpt \
+    --image path/to/your-image.jpg \
     --output result.jpg
 ```
 
-### Benchmarking
+That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and saves a regular detector checkpoint you can hand off to your existing inference stack.
+
+### Compose from the command line
 
 ```bash
-# Quick benchmark with synthetic data
-python tools/benchmark.py --quick
-
-# Full benchmark
-python tools/benchmark.py --detector yolov8 --vlm qwen_vl --fusion distillation
+python tools/train.py \
+    detector=yolov8 detector.model_name=yolov8m \
+    vlm=qwen_vl vlm.model_name=qwen2-vl-2b \
+    fusion=distillation fusion.distill_mode=logit \
+    dataset=coco \
+    train.batch_size=16 train.max_epochs=50
 ```
 
-## Project Structure
+Every detector / VLM / fusion / dataset is a Hydra config group — override anything inline.
 
-```
-tianwen/
-├── configs/                      # Hydra configurations
-│   ├── config.yaml               # Main config entry point
-│   ├── detector/                 # Detector configs (yolov8, rtdetr, rf_detr, grounding_dino)
-│   ├── vlm/                      # VLM configs (qwen_vl, internvl)
-│   ├── fusion/                   # Fusion strategy configs
-│   ├── dataset/                  # Dataset configs
-│   └── experiment/               # Pre-defined experiment configs
-├── tianwen/                      # Core framework package
-│   ├── core/                     # Registry and config system
-│   ├── detectors/                # Detection model wrappers
-│   ├── vlms/                     # Vision-Language Model wrappers
-│   ├── fusions/                  # Fusion strategies
-│   ├── datasets/                 # Data loading and transforms
-│   ├── engine/                   # Training engine (Lightning module, callbacks)
-│   └── utils/                    # Visualization, metrics, utilities
-├── tools/                        # CLI entry points
-│   ├── train.py                  # Standard training script (Hydra)
-│   ├── eval.py                   # Evaluation script
-│   ├── demo.py                   # Inference demo
-│   ├── benchmark.py              # Benchmark comparisons
-│   └── experiments/              # Experimental/research scripts
-│       ├── train_distillation.py
-│       ├── train_vlm_distillation.py
-│       ├── generate_vlm_soft_labels.py
-│       ├── generate_vlm_soft_labels_v2.py
-│       ├── run_distillation_pipeline.py
-│       ├── evaluate_distilled_model.py
-│       ├── coco_benchmark.py
-│       ├── coco_benchmark_real_vlm.py
-│       ├── coco_benchmark_tianwen_fusion.py
-│       ├── compare_detector_vlm.py
-│       ├── quick_benchmark.py
-│       └── visualize_comparison.py
-└── tests/                        # Unit tests
-```
+## 🧩 What's inside
 
-## Fusion Strategies
+| Detectors | Vision-Language Models | Fusion strategies |
+|---|---|---|
+| YOLOv8 / v11 (`ultralytics`) | Qwen2-VL (2B / 7B / 72B) | **Knowledge Distillation** — VLM as teacher, detector as student (feature / logit / response) |
+| RT-DETR | InternVL3 | **Feature Fusion** — Inject VLM features at backbone / neck / head |
+| RF-DETR (`autodistill-rfdetr`) | | **Decision Fusion** — VLM verifies and rescores detector boxes (offline / batch only — see notes) |
+| Grounding-DINO | | |
 
-### Knowledge Distillation
-
-VLM acts as a teacher, providing soft supervision to the detector:
-
-```yaml
-fusion:
-  type: distillation
-  distill_mode: feature  # feature, logit, response
-  temperature: 4.0
-  alpha: 0.5
-```
-
-### Feature Fusion
-
-Inject VLM visual features into detector's feature pyramid:
-
-```yaml
-fusion:
-  type: feature_fusion
-  fusion_level: neck  # backbone, neck, head
-  fusion_type: cross_attention  # cross_attention, adapter, concat
-```
-
-### Decision Fusion
-
-VLM verifies and refines detection results:
-
-```yaml
-fusion:
-  type: decision_fusion
-  verification_mode: binary  # binary, confidence, reclassify
-  score_adjustment: 0.3
-```
-
-## Configuration
-
-TianWen uses Hydra for hierarchical configuration. Key config groups:
-
-| Group | Description |
-|-------|-------------|
-| `detector` | Detection model settings |
-| `vlm` | Vision-Language Model settings |
-| `fusion` | Fusion strategy settings |
-| `dataset` | Dataset and augmentation settings |
-| `train` | Training hyperparameters |
-| `trainer` | PyTorch Lightning trainer settings |
-
-Override any parameter from command line:
-
-```bash
-python tools/train.py detector.model_name=yolov8x train.learning_rate=5e-5
-```
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `COCO_ROOT` | Path to COCO dataset root directory | `./data/coco` |
-
-## Extending the Framework
-
-### Adding a New Detector
+Adding a new detector or VLM is one decorator:
 
 ```python
 from tianwen.core.registry import DETECTORS
@@ -197,100 +79,86 @@ from tianwen.detectors.base import BaseDetector
 
 @DETECTORS.register("my_detector")
 class MyDetector(BaseDetector):
-    def __init__(self, ...):
-        super().__init__(...)
-
     def forward(self, images, targets=None):
         ...
-
-    def extract_features(self, images, feature_levels=None):
-        ...
-
-    def compute_loss(self, predictions, targets):
-        ...
 ```
 
-### Adding a New VLM
+## 🏗 Architecture
 
-```python
-from tianwen.core.registry import VLMS
-from tianwen.vlms.base import BaseVLM
-
-@VLMS.register("my_vlm")
-class MyVLM(BaseVLM):
-    def __init__(self, ...):
-        super().__init__(...)
-
-    def encode_image(self, images):
-        ...
-
-    def generate(self, images, prompts, max_new_tokens=512):
-        ...
-
-    def get_visual_features(self, images, return_all_layers=False):
-        ...
+```
+Hydra configs ──► PyTorch Lightning Trainer ──► { Detector | VLM | Fusion } modules
+                                                  │
+                                                  └── registered via @REGISTRY decorators
 ```
 
-### Adding a New Fusion Strategy
+See the [project page](https://hollis36.github.io/tianwen-project-page/#architecture) for the full diagram and per-strategy schematics.
 
-```python
-from tianwen.core.registry import FUSIONS
-from tianwen.fusions.base import BaseFusion
+## 📊 Benchmarks
 
-@FUSIONS.register("my_fusion")
-class MyFusion(BaseFusion):
-    def __init__(self, detector, vlm, ...):
-        super().__init__(detector, vlm)
+> **Pending.** Comparison runs across COCO and rare-class subsets are in progress. We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them. Star/watch the repo to be notified when the first table lands.
 
-    def forward(self, images, targets=None):
-        ...
+Tracking the work-in-progress numbers: [Discussions → Benchmarks](https://github.com/Hollis36/TianWen/discussions/categories/benchmarks).
 
-    def compute_loss(self, outputs, targets):
-        ...
-```
+## 🗺️ Roadmap
 
-## Requirements
+**v0.3 — Reproducibility (Q3 2026)**
+- [ ] Single full benchmark on COCO val for YOLOv8 + Qwen2-VL distillation (3 seeds)
+- [ ] Pre-trained checkpoints on Hugging Face Hub
+- [ ] Colab quickstart notebook
 
-- Python >= 3.9
-- PyTorch >= 2.0
-- PyTorch Lightning >= 2.0
-- transformers >= 4.45
-- ultralytics >= 8.3
-- hydra-core >= 1.3
+**v0.4 — Adoption (Q4 2026)**
+- [ ] PyPI release (`pip install tianwen`)
+- [ ] LVIS long-tail evaluation
+- [ ] `tianwen serve` CLI for inference HTTP server
+- [ ] Documentation site (MkDocs)
 
-## Benchmark Results
+**v0.5 — Research-grade (Q1 2027)**
+- [ ] OWL-ViT / DINOv2 detectors
+- [ ] LLaVA-Next, Molmo VLMs
+- [ ] Domain-adaptive distillation recipes (defect detection focus)
 
-| Method | Backbone | mAP@50 | mAP@50:95 | FPS |
-|--------|----------|--------|-----------|-----|
-| YOLOv8-L (baseline) | CSPDarknet | - | - | - |
-| YOLOv8-L + Qwen2-VL (distill) | CSPDarknet | - | - | - |
+**Considered but not on the path:**
+- ❌ Real-time decision fusion — Per-box VLM verification is 100× slower than the detector; we keep it as an offline / re-ranking tool, not a real-time path.
+- ❌ Custom CUDA kernels — Out of scope; lean on upstream backends.
 
-> Results will be updated as experiments are completed.
+## 🤝 Contributing
 
-## Architecture Overview
+Issues and PRs welcome. Especially valued:
 
-```mermaid
-flowchart LR
-    IMG[Input Image] --> DET[Detector\nYOLOv8 / RT-DETR / ...]
-    IMG --> VLM[VLM\nQwen2-VL / InternVL3]
-    DET -- features / logits --> FUSE{Fusion Strategy}
-    VLM -- visual features --> FUSE
-    FUSE -->|distillation| DET_OUT[Improved Detector]
-    FUSE -->|feature fusion| DET_OUT
-    FUSE -->|decision fusion| DET_OUT
-    DET_OUT --> PRED[Predictions]
-```
+- 🐛 Reproductions of training failures (config + log + error)
+- 📈 Benchmark contributions on any dataset
+- 🧱 New detector / VLM wrappers (one decorator + tests)
+- 📝 Documentation, tutorials, Colab notebooks
 
-## Citation
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev loop and code style. Tagged [`good first issue`](https://github.com/Hollis36/TianWen/labels/good%20first%20issue) is the easiest entry.
+
+## 📝 Citation
+
+A preprint is in preparation. For now:
 
 ```bibtex
-@software{tianwen2024,
-  title = {TianWen: A Universal Training Framework for Detection-VLM Fusion},
-  year = {2024},
-  url = {https://github.com/Hollis36/TianWen}
+@misc{zhang2026tianwen,
+  title  = {TianWen: A Plug-In Toolkit for Detector × VLM Fusion in PyTorch Lightning},
+  author = {Zhang, Peifu},
+  year   = {2026},
+  note   = {Project page: https://hollis36.github.io/tianwen-project-page/},
+  url    = {https://github.com/Hollis36/TianWen}
 }
 ```
 
-## License
+## 🙏 Acknowledgements
 
-Apache 2.0 License
+Stands on the shoulders of: [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning), [Hydra](https://github.com/facebookresearch/hydra), [Ultralytics](https://github.com/ultralytics/ultralytics), [Qwen](https://github.com/QwenLM), [InternVL](https://github.com/OpenGVLab/InternVL), [Grounding-DINO](https://github.com/IDEA-Research/GroundingDINO), [torchmetrics](https://github.com/Lightning-AI/torchmetrics).
+
+## 📄 License
+
+[Apache 2.0](LICENSE). Use it, fork it, ship it.
+
+---
+
+<div align="center">
+
+Made by [Peifu Zhang](https://hollis36.github.io/) at Xidian University.<br/>
+If this project helped you, leave a ⭐ — that's how we know to keep going.
+
+</div>
