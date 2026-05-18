@@ -7,7 +7,7 @@
 **Plug Vision-Language Models into your object detector — in one config file.**
 
 [![CI](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml/badge.svg)](https://github.com/Hollis36/TianWen/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9_|_3.10_|_3.11_|_3.12-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10_|_3.11_|_3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache_2.0-green)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Hollis36/TianWen?style=social)](https://github.com/Hollis36/TianWen/stargazers)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
