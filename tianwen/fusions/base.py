@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from tianwen.detectors.base import BaseDetector, DetectionOutput, BatchDetectionOutput
+from tianwen.detectors.base import BaseDetector, BatchDetectionOutput, DetectionOutput
 from tianwen.vlms.base import BaseVLM, VLMOutput
 
 
@@ -29,6 +29,7 @@ class FusionOutput:
         loss_dict: Loss dictionary during training
         metrics: Optional metrics computed during forward pass
     """
+
     detection_output: Union[DetectionOutput, BatchDetectionOutput]
     vlm_output: Optional[VLMOutput] = None
     fusion_features: Optional[Dict[str, Tensor]] = None
@@ -38,14 +39,22 @@ class FusionOutput:
     def to(self, device: torch.device) -> "FusionOutput":
         """Move all tensors to the specified device."""
         return FusionOutput(
-            detection_output=self.detection_output.to(device)
-            if hasattr(self.detection_output, 'to') else self.detection_output,
-            vlm_output=self.vlm_output.to(device)
-            if self.vlm_output is not None else None,
-            fusion_features={k: v.to(device) for k, v in self.fusion_features.items()}
-            if self.fusion_features is not None else None,
-            loss_dict={k: v.to(device) for k, v in self.loss_dict.items()}
-            if self.loss_dict is not None else None,
+            detection_output=(
+                self.detection_output.to(device)
+                if hasattr(self.detection_output, "to")
+                else self.detection_output
+            ),
+            vlm_output=self.vlm_output.to(device) if self.vlm_output is not None else None,
+            fusion_features=(
+                {k: v.to(device) for k, v in self.fusion_features.items()}
+                if self.fusion_features is not None
+                else None
+            ),
+            loss_dict=(
+                {k: v.to(device) for k, v in self.loss_dict.items()}
+                if self.loss_dict is not None
+                else None
+            ),
             metrics=self.metrics,
         )
 
@@ -175,23 +184,27 @@ class BaseFusion(ABC, nn.Module):
 
         # Detector parameters
         if not self._freeze_detector:
-            param_groups.append({
-                "params": self.detector.get_trainable_params(),
-                "lr": lr * detector_lr_scale,
-                "weight_decay": weight_decay,
-                "name": "detector",
-            })
+            param_groups.append(
+                {
+                    "params": self.detector.get_trainable_params(),
+                    "lr": lr * detector_lr_scale,
+                    "weight_decay": weight_decay,
+                    "name": "detector",
+                }
+            )
 
         # VLM parameters (usually frozen, but support fine-tuning)
         if not self._freeze_vlm:
             vlm_params = [p for p in self.vlm.parameters() if p.requires_grad]
             if vlm_params:
-                param_groups.append({
-                    "params": vlm_params,
-                    "lr": lr * vlm_lr_scale,
-                    "weight_decay": weight_decay,
-                    "name": "vlm",
-                })
+                param_groups.append(
+                    {
+                        "params": vlm_params,
+                        "lr": lr * vlm_lr_scale,
+                        "weight_decay": weight_decay,
+                        "name": "vlm",
+                    }
+                )
 
         # Fusion-specific parameters (adapters, projectors, etc.)
         fusion_params = []
@@ -200,12 +213,14 @@ class BaseFusion(ABC, nn.Module):
                 fusion_params.extend([p for p in module.parameters() if p.requires_grad])
 
         if fusion_params:
-            param_groups.append({
-                "params": fusion_params,
-                "lr": lr,
-                "weight_decay": weight_decay,
-                "name": "fusion",
-            })
+            param_groups.append(
+                {
+                    "params": fusion_params,
+                    "lr": lr,
+                    "weight_decay": weight_decay,
+                    "name": "fusion",
+                }
+            )
 
         return param_groups
 
@@ -222,9 +237,11 @@ class BaseFusion(ABC, nn.Module):
             "vlm_total": self.vlm.count_parameters(trainable_only=False),
             "vlm_trainable": self.vlm.count_parameters(trainable_only=True),
             "fusion_trainable": sum(
-                p.numel() for name, module in self.named_children()
+                p.numel()
+                for name, module in self.named_children()
                 if name not in ["detector", "vlm"]
-                for p in module.parameters() if p.requires_grad
+                for p in module.parameters()
+                if p.requires_grad
             ),
         }
 

@@ -8,13 +8,10 @@ to improve detection performance through various fusion strategies.
 __version__ = "0.1.0"
 __author__ = "TianWen Team"
 
-from tianwen.core.registry import DETECTORS, VLMS, FUSIONS, DATASETS
-from tianwen.core.config import build_from_cfg
-
 # Auto-register components
-from tianwen import detectors
-from tianwen import vlms
-from tianwen import fusions
+from tianwen import detectors, fusions, vlms
+from tianwen.core.config import build_from_cfg
+from tianwen.core.registry import DATASETS, DETECTORS, FUSIONS, VLMS
 
 __all__ = [
     "__version__",

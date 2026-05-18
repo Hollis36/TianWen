@@ -9,8 +9,8 @@ Reference:
     - GitHub: https://github.com/lyuwenyu/RT-DETR
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -19,8 +19,8 @@ from torch import Tensor
 from tianwen.core.registry import DETECTORS
 from tianwen.detectors.base import (
     BaseDetector,
-    DetectionOutput,
     BatchDetectionOutput,
+    DetectionOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -120,8 +120,7 @@ class RTDETRDetector(BaseDetector):
             from ultralytics import RTDETR
         except ImportError:
             raise ImportError(
-                "ultralytics is required for RT-DETR. "
-                "Install with: pip install ultralytics"
+                "ultralytics is required for RT-DETR. " "Install with: pip install ultralytics"
             )
 
         if checkpoint_path:
@@ -152,8 +151,7 @@ class RTDETRDetector(BaseDetector):
         # Placeholder for native RT-DETR loading
         # In practice, would use the official RT-DETR repo
         raise NotImplementedError(
-            "Native RT-DETR loading not yet implemented. "
-            "Use use_ultralytics=True instead."
+            "Native RT-DETR loading not yet implemented. " "Use use_ultralytics=True instead."
         )
 
     @property
@@ -206,17 +204,21 @@ class RTDETRDetector(BaseDetector):
             for result in results:
                 boxes = result.boxes
                 if len(boxes) > 0:
-                    outputs.append(DetectionOutput(
-                        boxes=boxes.xyxy,
-                        scores=boxes.conf,
-                        labels=boxes.cls.long(),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=boxes.xyxy,
+                            scores=boxes.conf,
+                            labels=boxes.cls.long(),
+                        )
+                    )
                 else:
-                    outputs.append(DetectionOutput(
-                        boxes=torch.zeros((0, 4), device=images.device),
-                        scores=torch.zeros(0, device=images.device),
-                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=torch.zeros((0, 4), device=images.device),
+                            scores=torch.zeros(0, device=images.device),
+                            labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                        )
+                    )
 
         return BatchDetectionOutput(
             outputs=outputs,
@@ -235,17 +237,21 @@ class RTDETRDetector(BaseDetector):
         for result in results:
             boxes = result.boxes
             if len(boxes) > 0:
-                outputs.append(DetectionOutput(
-                    boxes=boxes.xyxy,
-                    scores=boxes.conf,
-                    labels=boxes.cls.long(),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=boxes.xyxy,
+                        scores=boxes.conf,
+                        labels=boxes.cls.long(),
+                    )
+                )
             else:
-                outputs.append(DetectionOutput(
-                    boxes=torch.zeros((0, 4), device=images.device),
-                    scores=torch.zeros(0, device=images.device),
-                    labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=torch.zeros((0, 4), device=images.device),
+                        scores=torch.zeros(0, device=images.device),
+                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                    )
+                )
 
         return BatchDetectionOutput(outputs=outputs)
 
@@ -258,7 +264,9 @@ class RTDETRDetector(BaseDetector):
 
         TODO: Implement actual RT-DETR loss computation (Hungarian matching + losses).
         """
-        logger.warning("Using placeholder RT-DETR loss (returns zeros). Implement _compute_losses() for real training.")
+        logger.warning(
+            "Using placeholder RT-DETR loss (returns zeros). Implement _compute_losses() for real training."
+        )
         device = next(self.parameters()).device
         return {
             "loss_vfl": torch.tensor(0.0, device=device, requires_grad=True),
@@ -280,6 +288,7 @@ class RTDETRDetector(BaseDetector):
         def make_hook(name):
             def hook(module, input, output):
                 self._features[name] = output
+
             return hook
 
         # Setup hooks based on model structure

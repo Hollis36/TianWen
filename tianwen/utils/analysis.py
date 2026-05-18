@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ModelStats:
     """Container for model statistics."""
+
     total_params: int
     trainable_params: int
     frozen_params: int
@@ -99,10 +100,7 @@ class ModelAnalyzer:
             param_groups[group] = param_groups.get(group, 0) + count
 
         # Estimate memory
-        total_memory = sum(
-            p.numel() * p.element_size()
-            for p in self.model.parameters()
-        )
+        total_memory = sum(p.numel() * p.element_size() for p in self.model.parameters())
         total_memory_mb = total_memory / (1024 * 1024)
 
         return ModelStats(
@@ -175,13 +173,11 @@ class ModelAnalyzer:
             class_name = child.__class__.__name__
 
             if num_params > 0 or total_params > 0:
-                lines.append(
-                    f"{indent}{prefix}{name} ({class_name}): "
-                    f"{total_params:,} params"
-                )
+                lines.append(f"{indent}{prefix}{name} ({class_name}): " f"{total_params:,} params")
 
             self._add_module_summary(
-                lines, child,
+                lines,
+                child,
                 prefix=f"{name}.",
                 depth=depth,
                 current_depth=current_depth + 1,
@@ -232,6 +228,7 @@ class ModelAnalyzer:
                 times.append(end - start)
 
         import numpy as np
+
         times = np.array(times)
 
         return {
@@ -260,6 +257,7 @@ class ModelAnalyzer:
                 if isinstance(output, tuple):
                     output = output[0]
                 self._activations[name] = output.detach()
+
             return hook
 
         for name, module in self.model.named_modules():
@@ -284,6 +282,7 @@ class ModelAnalyzer:
             def hook(module, grad_input, grad_output):
                 if grad_output[0] is not None:
                     self._gradients[name] = grad_output[0].detach()
+
             return hook
 
         for name, module in self.model.named_modules():
@@ -448,7 +447,7 @@ class FeatureVisualizer:
         num_channels = min(num_channels, features.shape[0])
 
         # Create grid
-        rows = int(num_channels ** 0.5)
+        rows = int(num_channels**0.5)
         cols = (num_channels + rows - 1) // rows
 
         fig, axes = plt.subplots(rows, cols, figsize=figsize)
@@ -917,6 +916,7 @@ def print_layer_shapes(
                 output = output[0]
             if isinstance(output, Tensor):
                 shapes[name] = tuple(output.shape)
+
         return hook
 
     for name, module in model.named_modules():

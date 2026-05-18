@@ -37,6 +37,7 @@ class SearchSpace:
         >>> space.add_discrete("batch_size", [8, 16, 32, 64])
         >>> space.add_categorical("optimizer", ["adam", "sgd", "adamw"])
     """
+
     params: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     def add_continuous(
@@ -180,6 +181,7 @@ class SearchSpace:
             if spec["type"] == "continuous":
                 # Create 5 evenly spaced values
                 import numpy as np
+
                 if spec["log_scale"]:
                     values = np.logspace(
                         np.log10(spec["low"]),
@@ -222,6 +224,7 @@ class SearchSpace:
 @dataclass
 class TrialResult:
     """Result of a single hyperparameter trial."""
+
     trial_id: int
     config: Dict[str, Any]
     metrics: Dict[str, float]
@@ -318,10 +321,7 @@ class HyperparameterSearch:
                             timestamp=trial_data.get("timestamp", ""),
                         )
                     )
-                    self._trial_counter = max(
-                        self._trial_counter,
-                        trial_data["trial_id"] + 1
-                    )
+                    self._trial_counter = max(self._trial_counter, trial_data["trial_id"] + 1)
 
     def _save_trials(self) -> None:
         """Save all trials to disk."""
@@ -465,8 +465,7 @@ class HyperparameterSearch:
             Tuple of (best_config, best_metric_value)
         """
         completed_trials = [
-            t for t in self._trials
-            if t.status == "completed" and self.metric in t.metrics
+            t for t in self._trials if t.status == "completed" and self.metric in t.metrics
         ]
 
         if not completed_trials:
@@ -559,8 +558,7 @@ class HyperparameterSearch:
             return
 
         completed = [
-            t for t in self._trials
-            if t.status == "completed" and self.metric in t.metrics
+            t for t in self._trials if t.status == "completed" and self.metric in t.metrics
         ]
 
         if not completed:
@@ -622,8 +620,7 @@ class HyperparameterSearch:
             return
 
         completed = [
-            t for t in self._trials
-            if t.status == "completed" and self.metric in t.metrics
+            t for t in self._trials if t.status == "completed" and self.metric in t.metrics
         ]
 
         if len(completed) < 5:
@@ -671,8 +668,7 @@ class HyperparameterSearch:
 
         # Add value labels
         for bar, val in zip(bars, values):
-            ax.text(val + 0.01, bar.get_y() + bar.get_height()/2,
-                   f"{val:.3f}", va="center")
+            ax.text(val + 0.01, bar.get_y() + bar.get_height() / 2, f"{val:.3f}", va="center")
 
         plt.tight_layout()
 

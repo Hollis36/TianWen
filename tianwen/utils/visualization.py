@@ -47,10 +47,7 @@ def draw_boxes(
     if colors is None:
         np.random.seed(42)
         num_classes = max(labels) + 1 if len(labels) > 0 else 1
-        colors = [
-            tuple(np.random.randint(0, 255, 3).tolist())
-            for _ in range(num_classes)
-        ]
+        colors = [tuple(np.random.randint(0, 255, 3).tolist()) for _ in range(num_classes)]
 
     for i, (box, label) in enumerate(zip(boxes, labels)):
         x1, y1, x2, y2 = box.astype(int)
@@ -134,7 +131,10 @@ def visualize_detections(
         scores = pred.scores.cpu().numpy()
 
         img = draw_boxes(
-            img, boxes, labels, scores,
+            img,
+            boxes,
+            labels,
+            scores,
             class_names=class_names,
         )
 

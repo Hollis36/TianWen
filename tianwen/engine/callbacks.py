@@ -4,9 +4,9 @@ Custom PyTorch Lightning callbacks for TianWen framework.
 Provides visualization, metrics logging, and checkpointing callbacks.
 """
 
-from typing import Any, Dict, List, Optional
 import logging
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import torch
 from torch import Tensor
@@ -82,9 +82,7 @@ class VisualizationCallback(Callback):
             outputs = pl_module(images)
 
         # Create visualization
-        vis_images = self._draw_predictions(
-            images, outputs.detection_output, targets
-        )
+        vis_images = self._draw_predictions(images, outputs.detection_output, targets)
 
         # Log to experiment tracker
         if hasattr(trainer.logger, "experiment"):
@@ -101,11 +99,8 @@ class VisualizationCallback(Callback):
             # WandB
             elif hasattr(exp, "log"):
                 import wandb
-                exp.log({
-                    "predictions": [
-                        wandb.Image(img) for img in vis_images
-                    ]
-                })
+
+                exp.log({"predictions": [wandb.Image(img) for img in vis_images]})
 
     def _draw_predictions(
         self,
@@ -117,7 +112,9 @@ class VisualizationCallback(Callback):
 
         TODO: Implement actual visualization using OpenCV or PIL.
         """
-        logger.warning("_draw_predictions() is a placeholder; returning raw images without boxes drawn.")
+        logger.warning(
+            "_draw_predictions() is a placeholder; returning raw images without boxes drawn."
+        )
         return images
 
 
@@ -197,7 +194,9 @@ class MetricsCallback(Callback):
 
         TODO: Implement actual AP computation using pycocotools.COCOeval.
         """
-        logger.warning("_compute_ap() is a placeholder; returning 0.0. Implement with pycocotools for real metrics.")
+        logger.warning(
+            "_compute_ap() is a placeholder; returning 0.0. Implement with pycocotools for real metrics."
+        )
         return 0.0
 
 
@@ -338,4 +337,6 @@ class EarlyStoppingCallback(Callback):
 
         if self._counter >= self.patience:
             trainer.should_stop = True
-            logger.info(f"Early stopping triggered after {self._counter} epochs without improvement")
+            logger.info(
+                f"Early stopping triggered after {self._counter} epochs without improvement"
+            )

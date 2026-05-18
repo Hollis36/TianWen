@@ -9,8 +9,8 @@ Reference:
     - GitHub: https://github.com/IDEA-Research/GroundingDINO
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -19,8 +19,8 @@ from torch import Tensor
 from tianwen.core.registry import DETECTORS
 from tianwen.detectors.base import (
     BaseDetector,
-    DetectionOutput,
     BatchDetectionOutput,
+    DetectionOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,19 +98,86 @@ class GroundingDINODetector(BaseDetector):
     def _get_coco_classes(self) -> List[str]:
         """Return COCO class names."""
         return [
-            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
-            "truck", "boat", "traffic light", "fire hydrant", "stop sign",
-            "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep",
-            "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
-            "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard",
-            "sports ball", "kite", "baseball bat", "baseball glove", "skateboard",
-            "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork",
-            "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
-            "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair",
-            "couch", "potted plant", "bed", "dining table", "toilet", "tv",
-            "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave",
-            "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase",
-            "scissors", "teddy bear", "hair drier", "toothbrush"
+            "person",
+            "bicycle",
+            "car",
+            "motorcycle",
+            "airplane",
+            "bus",
+            "train",
+            "truck",
+            "boat",
+            "traffic light",
+            "fire hydrant",
+            "stop sign",
+            "parking meter",
+            "bench",
+            "bird",
+            "cat",
+            "dog",
+            "horse",
+            "sheep",
+            "cow",
+            "elephant",
+            "bear",
+            "zebra",
+            "giraffe",
+            "backpack",
+            "umbrella",
+            "handbag",
+            "tie",
+            "suitcase",
+            "frisbee",
+            "skis",
+            "snowboard",
+            "sports ball",
+            "kite",
+            "baseball bat",
+            "baseball glove",
+            "skateboard",
+            "surfboard",
+            "tennis racket",
+            "bottle",
+            "wine glass",
+            "cup",
+            "fork",
+            "knife",
+            "spoon",
+            "bowl",
+            "banana",
+            "apple",
+            "sandwich",
+            "orange",
+            "broccoli",
+            "carrot",
+            "hot dog",
+            "pizza",
+            "donut",
+            "cake",
+            "chair",
+            "couch",
+            "potted plant",
+            "bed",
+            "dining table",
+            "toilet",
+            "tv",
+            "laptop",
+            "mouse",
+            "remote",
+            "keyboard",
+            "cell phone",
+            "microwave",
+            "oven",
+            "toaster",
+            "sink",
+            "refrigerator",
+            "book",
+            "clock",
+            "vase",
+            "scissors",
+            "teddy bear",
+            "hair drier",
+            "toothbrush",
         ]
 
     def _load_model(
@@ -127,6 +194,7 @@ class GroundingDINODetector(BaseDetector):
             try:
                 # Try autodistill wrapper
                 from autodistill_grounding_dino import GroundingDINO
+
                 self._use_autodistill = True
                 self.model = GroundingDINO(
                     ontology=None,
@@ -248,17 +316,23 @@ class GroundingDINODetector(BaseDetector):
                 result = self.model.predict(img, text_prompt)
 
                 if result and len(result.xyxy) > 0:
-                    outputs.append(DetectionOutput(
-                        boxes=torch.tensor(result.xyxy, device=images.device),
-                        scores=torch.tensor(result.confidence, device=images.device),
-                        labels=torch.tensor(result.class_id, dtype=torch.long, device=images.device),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=torch.tensor(result.xyxy, device=images.device),
+                            scores=torch.tensor(result.confidence, device=images.device),
+                            labels=torch.tensor(
+                                result.class_id, dtype=torch.long, device=images.device
+                            ),
+                        )
+                    )
                 else:
-                    outputs.append(DetectionOutput(
-                        boxes=torch.zeros((0, 4), device=images.device),
-                        scores=torch.zeros(0, device=images.device),
-                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=torch.zeros((0, 4), device=images.device),
+                            scores=torch.zeros(0, device=images.device),
+                            labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                        )
+                    )
         else:
             # Using native Grounding-DINO
             for i in range(batch_size):
@@ -285,17 +359,21 @@ class GroundingDINODetector(BaseDetector):
                         else:
                             labels.append(0)
 
-                    outputs.append(DetectionOutput(
-                        boxes=boxes,
-                        scores=logits,
-                        labels=torch.tensor(labels, dtype=torch.long, device=images.device),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=boxes,
+                            scores=logits,
+                            labels=torch.tensor(labels, dtype=torch.long, device=images.device),
+                        )
+                    )
                 else:
-                    outputs.append(DetectionOutput(
-                        boxes=torch.zeros((0, 4), device=images.device),
-                        scores=torch.zeros(0, device=images.device),
-                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                    ))
+                    outputs.append(
+                        DetectionOutput(
+                            boxes=torch.zeros((0, 4), device=images.device),
+                            scores=torch.zeros(0, device=images.device),
+                            labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                        )
+                    )
 
         return BatchDetectionOutput(outputs=outputs)
 
@@ -398,13 +476,15 @@ class GroundingDINODetector(BaseDetector):
             text_prompt = vlm_descriptions[i] if i < len(vlm_descriptions) else ""
 
             if text_prompt:
-                result = self._forward_inference(images[i:i+1], text_prompt)
+                result = self._forward_inference(images[i : i + 1], text_prompt)
                 outputs.extend(result.outputs)
             else:
-                outputs.append(DetectionOutput(
-                    boxes=torch.zeros((0, 4), device=images.device),
-                    scores=torch.zeros(0, device=images.device),
-                    labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=torch.zeros((0, 4), device=images.device),
+                        scores=torch.zeros(0, device=images.device),
+                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                    )
+                )
 
         return BatchDetectionOutput(outputs=outputs)

@@ -9,8 +9,8 @@ Reference:
     - GitHub: https://github.com/roboflow/rf-detr
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -19,8 +19,8 @@ from torch import Tensor
 from tianwen.core.registry import DETECTORS
 from tianwen.detectors.base import (
     BaseDetector,
-    DetectionOutput,
     BatchDetectionOutput,
+    DetectionOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,8 +106,7 @@ class RFDETRDetector(BaseDetector):
             from rfdetr import RFDETRBase, RFDETRLarge
         except ImportError:
             raise ImportError(
-                "rfdetr is required for RF-DETR detector. "
-                "Install it with: pip install rfdetr"
+                "rfdetr is required for RF-DETR detector. " "Install it with: pip install rfdetr"
             )
 
         # Select model class based on variant
@@ -186,17 +185,21 @@ class RFDETRDetector(BaseDetector):
         det_outputs = []
         for output in outputs:
             if hasattr(output, "boxes") and len(output.boxes) > 0:
-                det_outputs.append(DetectionOutput(
-                    boxes=output.boxes,
-                    scores=output.scores,
-                    labels=output.labels.long(),
-                ))
+                det_outputs.append(
+                    DetectionOutput(
+                        boxes=output.boxes,
+                        scores=output.scores,
+                        labels=output.labels.long(),
+                    )
+                )
             else:
-                det_outputs.append(DetectionOutput(
-                    boxes=torch.zeros((0, 4), device=images.device),
-                    scores=torch.zeros(0, device=images.device),
-                    labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                ))
+                det_outputs.append(
+                    DetectionOutput(
+                        boxes=torch.zeros((0, 4), device=images.device),
+                        scores=torch.zeros(0, device=images.device),
+                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                    )
+                )
 
         return BatchDetectionOutput(outputs=det_outputs)
 
@@ -218,18 +221,22 @@ class RFDETRDetector(BaseDetector):
 
                 # Filter by confidence
                 mask = scores > self.conf_threshold
-                det_outputs.append(DetectionOutput(
-                    boxes=boxes[mask],
-                    scores=scores[mask],
-                    labels=labels[mask],
-                ))
+                det_outputs.append(
+                    DetectionOutput(
+                        boxes=boxes[mask],
+                        scores=scores[mask],
+                        labels=labels[mask],
+                    )
+                )
         else:
             # Fallback
-            det_outputs.append(DetectionOutput(
-                boxes=torch.zeros((0, 4), device=device),
-                scores=torch.zeros(0, device=device),
-                labels=torch.zeros(0, dtype=torch.long, device=device),
-            ))
+            det_outputs.append(
+                DetectionOutput(
+                    boxes=torch.zeros((0, 4), device=device),
+                    scores=torch.zeros(0, device=device),
+                    labels=torch.zeros(0, dtype=torch.long, device=device),
+                )
+            )
 
         return det_outputs
 
@@ -244,7 +251,9 @@ class RFDETRDetector(BaseDetector):
             return self.model.compute_loss(outputs, targets)
 
         # TODO: Implement actual RF-DETR loss computation.
-        logger.warning("Using placeholder RF-DETR loss (returns zeros). Implement _compute_losses() for real training.")
+        logger.warning(
+            "Using placeholder RF-DETR loss (returns zeros). Implement _compute_losses() for real training."
+        )
         device = next(self.parameters()).device
         return {
             "loss_ce": torch.tensor(0.0, device=device, requires_grad=True),
@@ -278,6 +287,7 @@ class RFDETRDetector(BaseDetector):
         def make_hook(name):
             def hook(module, input, output):
                 self._features[name] = output
+
             return hook
 
         # Hook backbone output

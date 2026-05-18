@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from tianwen.core.registry import Registry, DETECTORS, VLMS, FUSIONS
+from tianwen.core.registry import DETECTORS, FUSIONS, VLMS, Registry
 
 
 class TestRegistry:

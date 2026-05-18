@@ -1,7 +1,7 @@
 """Dataset modules for TianWen framework."""
 
 from tianwen.datasets.base import BaseDataset
-from tianwen.datasets.coco import COCODataset, COCODataModule
+from tianwen.datasets.coco import COCODataModule, COCODataset
 from tianwen.datasets.transforms import build_transforms
 
 __all__ = [

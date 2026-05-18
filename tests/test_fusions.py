@@ -12,7 +12,6 @@ from tianwen.detectors.base import BaseDetector, BatchDetectionOutput, Detection
 from tianwen.fusions.distillation import FeatureProjector, KnowledgeDistillation, MutualDistillation
 from tianwen.vlms.base import BaseVLM, VLMOutput
 
-
 # ---------------------------------------------------------------------------
 # Minimal mock implementations
 # ---------------------------------------------------------------------------
@@ -54,9 +53,7 @@ class MockDetector(BaseDetector):
     def compute_loss(self, predictions: Any, targets: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         return {"box_loss": torch.tensor(0.0)}
 
-    def get_optimizer_groups(
-        self, lr: float, weight_decay: float = 0.0
-    ) -> List[Dict[str, Any]]:
+    def get_optimizer_groups(self, lr: float, weight_decay: float = 0.0) -> List[Dict[str, Any]]:
         return [{"params": self.parameters(), "lr": lr}]
 
 

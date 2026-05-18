@@ -4,8 +4,8 @@ Qwen-VL wrapper for TianWen framework.
 Supports Qwen-VL and Qwen2-VL models for vision-language understanding.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -92,7 +92,7 @@ class QwenVLModel(BaseVLM):
     def _load_model(self) -> None:
         """Load Qwen-VL model and processor."""
         try:
-            from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+            from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
         except ImportError:
             raise ImportError(
                 "transformers>=4.35.0 is required for Qwen-VL. "
@@ -145,9 +145,7 @@ class QwenVLModel(BaseVLM):
             config = self.model.config
             # Vision encoder hidden size
             if hasattr(config, "vision_config"):
-                self.vision_hidden_size = getattr(
-                    config.vision_config, "hidden_size", 1024
-                )
+                self.vision_hidden_size = getattr(config.vision_config, "hidden_size", 1024)
             else:
                 self.vision_hidden_size = 1024  # Default
 
@@ -259,7 +257,7 @@ class QwenVLModel(BaseVLM):
 
         with torch.no_grad():
             for i in range(batch_size):
-                image = images[i:i+1]
+                image = images[i : i + 1]
                 prompt = prompts[i]
 
                 # Prepare message format for Qwen2-VL
@@ -293,7 +291,7 @@ class QwenVLModel(BaseVLM):
                     )
 
                     # Decode
-                    generated_ids = output_ids[:, inputs.input_ids.shape[1]:]
+                    generated_ids = output_ids[:, inputs.input_ids.shape[1] :]
                     response = self.processor.batch_decode(
                         generated_ids,
                         skip_special_tokens=True,
@@ -314,10 +312,12 @@ class QwenVLModel(BaseVLM):
     ) -> str:
         """Generate with Qwen-VL (v1)."""
         # Simplified generation for Qwen-VL v1
-        query = self.processor.from_list_format([
-            {"image": image},
-            {"text": prompt},
-        ])
+        query = self.processor.from_list_format(
+            [
+                {"image": image},
+                {"text": prompt},
+            ]
+        )
 
         response, _ = self.model.chat(
             self.processor,
@@ -360,6 +360,7 @@ class QwenVLModel(BaseVLM):
         def make_hook(layer_idx):
             def hook(module, input, output):
                 layer_outputs.append((f"layer_{layer_idx}", output))
+
             return hook
 
         # Register hooks on vision encoder layers
@@ -466,7 +467,7 @@ class QwenVLModel(BaseVLM):
 
             # Generate description
             response = self.generate(
-                images[i:i+1],
+                images[i : i + 1],
                 [prompt],
                 max_new_tokens=256,
             )[0]
@@ -512,7 +513,7 @@ class QwenVLModel(BaseVLM):
 
                 # Generate response
                 response = self.generate(
-                    images[i:i+1],
+                    images[i : i + 1],
                     [prompt],
                     max_new_tokens=10,
                 )[0].lower()

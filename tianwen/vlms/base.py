@@ -26,6 +26,7 @@ class VLMOutput:
         hidden_states: Optional hidden states from the model
         attentions: Optional attention weights
     """
+
     visual_features: Optional[Tensor] = None
     text_outputs: Optional[List[str]] = None
     logits: Optional[Tensor] = None
@@ -35,14 +36,21 @@ class VLMOutput:
     def to(self, device: torch.device) -> "VLMOutput":
         """Move all tensors to the specified device."""
         return VLMOutput(
-            visual_features=self.visual_features.to(device)
-            if self.visual_features is not None else None,
+            visual_features=(
+                self.visual_features.to(device) if self.visual_features is not None else None
+            ),
             text_outputs=self.text_outputs,
             logits=self.logits.to(device) if self.logits is not None else None,
-            hidden_states=tuple(h.to(device) for h in self.hidden_states)
-            if self.hidden_states is not None else None,
-            attentions=tuple(a.to(device) for a in self.attentions)
-            if self.attentions is not None else None,
+            hidden_states=(
+                tuple(h.to(device) for h in self.hidden_states)
+                if self.hidden_states is not None
+                else None
+            ),
+            attentions=(
+                tuple(a.to(device) for a in self.attentions)
+                if self.attentions is not None
+                else None
+            ),
         )
 
 

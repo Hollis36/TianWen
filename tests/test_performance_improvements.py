@@ -1,10 +1,10 @@
 """Tests for performance improvements."""
 
-import pytest
 import numpy as np
+import pytest
 import torch
 
-from tianwen.utils.metrics import compute_iou, compute_ap
+from tianwen.utils.metrics import compute_ap, compute_iou
 
 
 class TestComputeIoU:
@@ -33,11 +33,10 @@ class TestComputeIoU:
 
     def test_matrix_shape(self):
         """IoU should return [N, M] matrix."""
-        boxes1 = torch.tensor([[0.0, 0.0, 10.0, 10.0],
-                                [5.0, 5.0, 15.0, 15.0]])
-        boxes2 = torch.tensor([[0.0, 0.0, 10.0, 10.0],
-                                [10.0, 10.0, 20.0, 20.0],
-                                [20.0, 20.0, 30.0, 30.0]])
+        boxes1 = torch.tensor([[0.0, 0.0, 10.0, 10.0], [5.0, 5.0, 15.0, 15.0]])
+        boxes2 = torch.tensor(
+            [[0.0, 0.0, 10.0, 10.0], [10.0, 10.0, 20.0, 20.0], [20.0, 20.0, 30.0, 30.0]]
+        )
         iou = compute_iou(boxes1, boxes2)
         assert iou.shape == (2, 3)
 
@@ -83,11 +82,14 @@ class TestBenchmarkComputeMetrics:
         """No predictions should give precision=0, recall=0."""
         from tools.benchmark import compute_metrics
 
-        predictions = [{"boxes": torch.zeros((0, 4)),
-                         "labels": torch.zeros(0, dtype=torch.long),
-                         "scores": torch.zeros(0)}]
-        targets = [{"boxes": torch.tensor([[10.0, 10.0, 50.0, 50.0]]),
-                     "labels": torch.tensor([0])}]
+        predictions = [
+            {
+                "boxes": torch.zeros((0, 4)),
+                "labels": torch.zeros(0, dtype=torch.long),
+                "scores": torch.zeros(0),
+            }
+        ]
+        targets = [{"boxes": torch.tensor([[10.0, 10.0, 50.0, 50.0]]), "labels": torch.tensor([0])}]
 
         metrics = compute_metrics(predictions, targets)
         assert metrics["recall"] == 0.0
@@ -98,8 +100,7 @@ class TestBenchmarkComputeMetrics:
         from tools.benchmark import compute_metrics
 
         boxes = torch.tensor([[10.0, 10.0, 50.0, 50.0]])
-        predictions = [{"boxes": boxes, "labels": torch.tensor([1]),
-                         "scores": torch.tensor([0.9])}]
+        predictions = [{"boxes": boxes, "labels": torch.tensor([1]), "scores": torch.tensor([0.9])}]
         targets = [{"boxes": boxes, "labels": torch.tensor([0])}]
 
         metrics = compute_metrics(predictions, targets)
@@ -114,7 +115,8 @@ class TestCocoBenchmarkIoUMatrix:
     def test_iou_matrix_shape(self):
         """compute_iou_matrix should return correct shape."""
         import sys
-        sys.path.insert(0, str(__import__('pathlib').Path(__file__).parent.parent))
+
+        sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent))
         from tools.experiments.coco_benchmark import compute_iou_matrix
 
         boxes1 = np.array([[0, 0, 10, 10], [5, 5, 15, 15]], dtype=np.float64)
@@ -133,7 +135,7 @@ class TestCocoBenchmarkIoUMatrix:
 
     def test_iou_matrix_matches_scalar(self):
         """Vectorized IoU should match scalar IoU computation."""
-        from tools.experiments.coco_benchmark import compute_iou_matrix, compute_iou
+        from tools.experiments.coco_benchmark import compute_iou, compute_iou_matrix
 
         boxes1 = np.array([[0, 0, 20, 20], [5, 5, 25, 25]], dtype=np.float64)
         boxes2 = np.array([[10, 10, 30, 30], [0, 0, 15, 15]], dtype=np.float64)
@@ -142,8 +144,9 @@ class TestCocoBenchmarkIoUMatrix:
         for i in range(len(boxes1)):
             for j in range(len(boxes2)):
                 scalar = compute_iou(boxes1[i], boxes2[j])
-                assert np.isclose(matrix[i, j], scalar, atol=1e-5), \
-                    f"Mismatch at [{i},{j}]: matrix={matrix[i,j]}, scalar={scalar}"
+                assert np.isclose(
+                    matrix[i, j], scalar, atol=1e-5
+                ), f"Mismatch at [{i},{j}]: matrix={matrix[i,j]}, scalar={scalar}"
 
 
 class TestCocoBenchmarkComputeAP:
@@ -174,19 +177,21 @@ class TestColorJitterCaching:
     def test_cached_transform_exists(self):
         """ColorJitter should have _transform attribute after init."""
         from tianwen.datasets.transforms import ColorJitter
+
         jitter = ColorJitter(brightness=0.2, contrast=0.2)
-        assert hasattr(jitter, '_transform')
+        assert hasattr(jitter, "_transform")
 
     def test_same_transform_reused(self):
         """The same _transform instance should be reused across calls."""
-        from tianwen.datasets.transforms import ColorJitter
         from PIL import Image
+
+        from tianwen.datasets.transforms import ColorJitter
 
         jitter = ColorJitter(brightness=0.2, contrast=0.2)
         transform_id = id(jitter._transform)
 
         # Call it
-        img = Image.new('RGB', (32, 32), color=(128, 128, 128))
+        img = Image.new("RGB", (32, 32), color=(128, 128, 128))
         boxes = torch.zeros((0, 4))
         labels = torch.zeros(0, dtype=torch.long)
         jitter(img, boxes, labels)
@@ -200,8 +205,9 @@ class TestDecisionFusionVectorized:
 
     def test_parse_vlm_response_binary(self):
         """Test VLM response parsing."""
-        from tianwen.fusions.decision_fusion import DecisionFusion
         from unittest.mock import MagicMock
+
+        from tianwen.fusions.decision_fusion import DecisionFusion
 
         # Create a mock detector and vlm
         mock_detector = MagicMock()

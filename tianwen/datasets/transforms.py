@@ -1,12 +1,12 @@
 """Data transforms for TianWen framework."""
 
-from typing import Callable, List, Optional, Tuple
 import random
+from typing import Callable, List, Optional, Tuple
 
-import torch
-from torch import Tensor
 import numpy as np
+import torch
 from PIL import Image
+from torch import Tensor
 from torchvision.transforms import ColorJitter as TVColorJitter
 
 
@@ -219,7 +219,7 @@ class RandomCrop:
 
             # Filter boxes with small area
             areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-            orig_areas = (boxes[:, 2] - boxes[:, 0] + 2*x) * (boxes[:, 3] - boxes[:, 1] + 2*y)
+            orig_areas = (boxes[:, 2] - boxes[:, 0] + 2 * x) * (boxes[:, 3] - boxes[:, 1] + 2 * y)
             valid = areas / orig_areas.clamp(min=1) > self.min_box_area
 
             boxes = boxes[valid]
@@ -247,11 +247,13 @@ def build_transforms(
     transforms = []
 
     if augment:
-        transforms.extend([
-            RandomHorizontalFlip(p=0.5),
-            RandomScale(scale_range=(0.8, 1.2)),
-            ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
-        ])
+        transforms.extend(
+            [
+                RandomHorizontalFlip(p=0.5),
+                RandomScale(scale_range=(0.8, 1.2)),
+                ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+            ]
+        )
 
     transforms.append(Resize(image_size))
 

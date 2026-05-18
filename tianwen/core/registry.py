@@ -5,9 +5,9 @@ Provides a unified way to register and build components (detectors, VLMs, fusion
 using a decorator-based registration pattern.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union
 import inspect
 import logging
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +180,7 @@ class Registry:
         try:
             return module_cls(**cfg)
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to build '{module_type}' from {self._name}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to build '{module_type}' from {self._name}: {e}") from e
 
     def list_available(self) -> List[str]:
         """List all available registered module names."""

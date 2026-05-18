@@ -1,14 +1,14 @@
 """COCO dataset implementation for TianWen framework."""
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-import logging
 
+import numpy as np
 import torch
+from PIL import Image
 from torch import Tensor
 from torch.utils.data import DataLoader
-import numpy as np
-from PIL import Image
 
 try:
     import pytorch_lightning as pl
@@ -61,9 +61,7 @@ class COCODataset(BaseDataset):
         try:
             from pycocotools.coco import COCO
         except ImportError:
-            raise ImportError(
-                "pycocotools is required. Install with: pip install pycocotools"
-            )
+            raise ImportError("pycocotools is required. Install with: pip install pycocotools")
 
         logger.info(f"Loading annotations from {self.ann_file}")
         self.coco = COCO(self.ann_file)
@@ -77,9 +75,7 @@ class COCODataset(BaseDataset):
         self.label_to_cat = {i: cat_id for cat_id, i in self.cat_to_label.items()}
 
         # Get class names
-        self._class_names = [
-            self.coco.cats[cat_id]["name"] for cat_id in self.cat_ids
-        ]
+        self._class_names = [self.coco.cats[cat_id]["name"] for cat_id in self.cat_ids]
 
         logger.info(f"Loaded {len(self.image_ids)} images with {len(self.cat_ids)} categories")
 

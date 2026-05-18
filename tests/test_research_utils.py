@@ -1,13 +1,18 @@
 """Tests for research utilities."""
 
-import pytest
-import tempfile
 import json
+import tempfile
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn as nn
 
+from tianwen.utils.analysis import (
+    AblationStudy,
+    ModelAnalyzer,
+    ModelStats,
+)
 from tianwen.utils.experiment import (
     ExperimentManager,
     ExperimentResult,
@@ -15,14 +20,9 @@ from tianwen.utils.experiment import (
     compute_config_hash,
     ensure_reproducibility,
 )
-from tianwen.utils.analysis import (
-    ModelAnalyzer,
-    ModelStats,
-    AblationStudy,
-)
 from tianwen.utils.hyperparameter import (
-    SearchSpace,
     HyperparameterSearch,
+    SearchSpace,
 )
 
 
@@ -314,6 +314,7 @@ class TestUtilityFunctions:
 
         # Check that random values are deterministic
         import random
+
         import numpy as np
 
         val1 = random.random()

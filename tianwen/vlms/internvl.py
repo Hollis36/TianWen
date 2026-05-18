@@ -10,8 +10,8 @@ Reference:
     - HuggingFace: https://huggingface.co/OpenGVLab/InternVL3-8B-hf
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -110,7 +110,7 @@ class InternVLModel(BaseVLM):
     def _load_model(self) -> None:
         """Load InternVL model and processor."""
         try:
-            from transformers import AutoProcessor, AutoModelForImageTextToText
+            from transformers import AutoModelForImageTextToText, AutoProcessor
         except ImportError:
             raise ImportError(
                 "transformers>=4.45.0 is required for InternVL3. "
@@ -172,9 +172,7 @@ class InternVLModel(BaseVLM):
 
             # Vision encoder hidden size
             if hasattr(config, "vision_config"):
-                self.vision_hidden_size = getattr(
-                    config.vision_config, "hidden_size", 1024
-                )
+                self.vision_hidden_size = getattr(config.vision_config, "hidden_size", 1024)
             elif hasattr(config, "visual_hidden_size"):
                 self.vision_hidden_size = config.visual_hidden_size
             else:
@@ -261,7 +259,7 @@ class InternVLModel(BaseVLM):
 
         with torch.no_grad():
             for i in range(batch_size):
-                image = images[i:i+1]
+                image = images[i : i + 1]
                 prompt = prompts[i] if i < len(prompts) else prompts[0]
 
                 if self._is_hf_format:
@@ -313,7 +311,7 @@ class InternVLModel(BaseVLM):
         )
 
         # Decode - skip input tokens
-        generated_ids = output_ids[:, inputs.input_ids.shape[1]:]
+        generated_ids = output_ids[:, inputs.input_ids.shape[1] :]
         response = self.processor.batch_decode(
             generated_ids,
             skip_special_tokens=True,
@@ -372,6 +370,7 @@ class InternVLModel(BaseVLM):
         def make_hook(idx):
             def hook(module, input, output):
                 layer_outputs.append((f"layer_{idx}", output))
+
             return hook
 
         # Register hooks
@@ -490,7 +489,7 @@ class InternVLModel(BaseVLM):
                 )
 
             response = self.generate(
-                images[i:i+1],
+                images[i : i + 1],
                 [prompt],
                 max_new_tokens=256,
             )[0]
@@ -531,7 +530,7 @@ class InternVLModel(BaseVLM):
                 prompt = f"Is there a {class_name} in this image? Answer only yes or no."
 
                 response = self.generate(
-                    images[i:i+1],
+                    images[i : i + 1],
                     [prompt],
                     max_new_tokens=10,
                 )[0].lower()
@@ -562,13 +561,12 @@ class InternVLModel(BaseVLM):
         descriptions = []
 
         prompt = (
-            "List all visible objects in this image. "
-            "Output format: object1 . object2 . object3"
+            "List all visible objects in this image. " "Output format: object1 . object2 . object3"
         )
 
         for i in range(batch_size):
             response = self.generate(
-                images[i:i+1],
+                images[i : i + 1],
                 [prompt],
                 max_new_tokens=100,
             )[0]

@@ -4,8 +4,8 @@ PyTorch Lightning module for training detector-VLM fusion models.
 Provides a unified training interface with support for various fusion strategies.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -17,14 +17,12 @@ try:
     import pytorch_lightning as pl
     from pytorch_lightning.utilities.types import STEP_OUTPUT
 except ImportError:
-    raise ImportError(
-        "pytorch-lightning is required. Install with: pip install pytorch-lightning"
-    )
+    raise ImportError("pytorch-lightning is required. Install with: pip install pytorch-lightning")
 
-from tianwen.core.registry import DETECTORS, VLMS, FUSIONS
+from tianwen.core.registry import DETECTORS, FUSIONS, VLMS
 from tianwen.detectors.base import BaseDetector
-from tianwen.vlms.base import BaseVLM
 from tianwen.fusions.base import BaseFusion, FusionOutput
+from tianwen.vlms.base import BaseVLM
 
 try:
     from torchmetrics.detection import MeanAveragePrecision
@@ -246,9 +244,7 @@ class DetectorVLMModule(pl.LightningModule):
         if self.map_metric is not None:
             map_results = self.map_metric.compute()
             self.log("val/mAP50", map_results.get("map_50", torch.tensor(0.0)), prog_bar=True)
-            self.log(
-                "val/mAP50_95", map_results.get("map", torch.tensor(0.0)), prog_bar=True
-            )
+            self.log("val/mAP50_95", map_results.get("map", torch.tensor(0.0)), prog_bar=True)
             self.map_metric.reset()
 
     def _format_for_map(
@@ -322,9 +318,7 @@ class DetectorVLMModule(pl.LightningModule):
             # Simple matching (placeholder)
             if len(pred_boxes) > 0 and len(gt_boxes) > 0:
                 # Count matches with IoU > 0.5
-                matches = self._count_matches(
-                    pred_boxes, pred_labels, gt_boxes, gt_labels
-                )
+                matches = self._count_matches(pred_boxes, pred_labels, gt_boxes, gt_labels)
                 total_correct += matches
 
         # Compute precision and recall

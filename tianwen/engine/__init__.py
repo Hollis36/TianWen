@@ -1,11 +1,11 @@
 """Training engine components for TianWen framework."""
 
-from tianwen.engine.lightning_module import DetectorVLMModule
 from tianwen.engine.callbacks import (
-    VisualizationCallback,
     MetricsCallback,
     ModelCheckpointCallback,
+    VisualizationCallback,
 )
+from tianwen.engine.lightning_module import DetectorVLMModule
 
 __all__ = [
     "DetectorVLMModule",

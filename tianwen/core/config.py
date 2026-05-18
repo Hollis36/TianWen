@@ -4,12 +4,12 @@ Configuration utilities for TianWen framework.
 Uses Hydra and OmegaConf for hierarchical configuration management.
 """
 
-from typing import Any, Dict, Optional, Union
-from pathlib import Path
 import copy
 import logging
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 logger = logging.getLogger(__name__)
 
@@ -134,4 +134,5 @@ def pretty_print_config(cfg: Union[Dict, DictConfig], indent: int = 2) -> str:
         return OmegaConf.to_yaml(cfg)
     else:
         import json
+
         return json.dumps(cfg, indent=indent, default=str)

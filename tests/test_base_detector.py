@@ -9,7 +9,6 @@ from torch import Tensor
 
 from tianwen.detectors.base import BaseDetector, BatchDetectionOutput, DetectionOutput
 
-
 # ---------------------------------------------------------------------------
 # Minimal concrete detector for testing abstract base class
 # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ class DistillationLoss(nn.Module):
         soft_student = F.log_softmax(student_logits / self.temperature, dim=-1)
         soft_teacher = F.softmax(teacher_logits / self.temperature, dim=-1)
 
-        soft_loss = self.kl_loss(soft_student, soft_teacher) * (self.temperature ** 2)
+        soft_loss = self.kl_loss(soft_student, soft_teacher) * (self.temperature**2)
 
         losses = {"soft_loss": soft_loss}
 

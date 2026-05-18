@@ -4,8 +4,8 @@ YOLO detector wrapper for TianWen framework.
 Supports YOLOv8 and YOLOv11 models via the ultralytics library.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -14,8 +14,8 @@ from torch import Tensor
 from tianwen.core.registry import DETECTORS
 from tianwen.detectors.base import (
     BaseDetector,
-    DetectionOutput,
     BatchDetectionOutput,
+    DetectionOutput,
 )
 
 logger = logging.getLogger(__name__)
@@ -181,11 +181,23 @@ class YOLODetector(BaseDetector):
             )
             for result in results:
                 boxes = result.boxes
-                outputs.append(DetectionOutput(
-                    boxes=boxes.xyxy if len(boxes) > 0 else torch.zeros((0, 4), device=images.device),
-                    scores=boxes.conf if len(boxes) > 0 else torch.zeros(0, device=images.device),
-                    labels=boxes.cls.long() if len(boxes) > 0 else torch.zeros(0, dtype=torch.long, device=images.device),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=(
+                            boxes.xyxy
+                            if len(boxes) > 0
+                            else torch.zeros((0, 4), device=images.device)
+                        ),
+                        scores=(
+                            boxes.conf if len(boxes) > 0 else torch.zeros(0, device=images.device)
+                        ),
+                        labels=(
+                            boxes.cls.long()
+                            if len(boxes) > 0
+                            else torch.zeros(0, dtype=torch.long, device=images.device)
+                        ),
+                    )
+                )
 
         return BatchDetectionOutput(
             outputs=outputs,
@@ -206,17 +218,21 @@ class YOLODetector(BaseDetector):
         for result in results:
             boxes = result.boxes
             if len(boxes) > 0:
-                outputs.append(DetectionOutput(
-                    boxes=boxes.xyxy,
-                    scores=boxes.conf,
-                    labels=boxes.cls.long(),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=boxes.xyxy,
+                        scores=boxes.conf,
+                        labels=boxes.cls.long(),
+                    )
+                )
             else:
-                outputs.append(DetectionOutput(
-                    boxes=torch.zeros((0, 4), device=images.device),
-                    scores=torch.zeros(0, device=images.device),
-                    labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                ))
+                outputs.append(
+                    DetectionOutput(
+                        boxes=torch.zeros((0, 4), device=images.device),
+                        scores=torch.zeros(0, device=images.device),
+                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
+                    )
+                )
 
         return BatchDetectionOutput(outputs=outputs)
 
@@ -279,8 +295,10 @@ class YOLODetector(BaseDetector):
 
     def _make_hook(self, name: str):
         """Create a forward hook to capture features."""
+
         def hook(module, input, output):
             self._features[name] = output
+
         return hook
 
     def compute_loss(
@@ -322,15 +340,17 @@ class YOLODetector(BaseDetector):
 
             # Create YOLO format: [batch_idx, class_id, x, y, w, h]
             batch_indices = torch.full((len(boxes),), batch_idx, device=boxes.device)
-            yolo_boxes = torch.stack([
-                batch_indices, labels.float(), x_center, y_center, width, height
-            ], dim=1)
+            yolo_boxes = torch.stack(
+                [batch_indices, labels.float(), x_center, y_center, width, height], dim=1
+            )
 
             all_targets.append(yolo_boxes)
 
         if all_targets:
             return torch.cat(all_targets, dim=0)
-        return torch.zeros((0, 6), device=image_shape.device if hasattr(image_shape, 'device') else 'cpu')
+        return torch.zeros(
+            (0, 6), device=image_shape.device if hasattr(image_shape, "device") else "cpu"
+        )
 
     def _compute_yolo_loss(
         self,
@@ -344,8 +364,12 @@ class YOLODetector(BaseDetector):
         loss functions or a custom implementation.
         """
         # Placeholder losses - returns zero losses
-        logger.warning("Using placeholder YOLO loss (returns zeros). Implement _compute_yolo_loss() for real training.")
-        device = predictions[0].device if isinstance(predictions, (list, tuple)) else predictions.device
+        logger.warning(
+            "Using placeholder YOLO loss (returns zeros). Implement _compute_yolo_loss() for real training."
+        )
+        device = (
+            predictions[0].device if isinstance(predictions, (list, tuple)) else predictions.device
+        )
         return {
             "box_loss": torch.tensor(0.0, device=device, requires_grad=True),
             "cls_loss": torch.tensor(0.0, device=device, requires_grad=True),

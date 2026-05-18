@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from tianwen.core.registry import FUSIONS
-from tianwen.detectors.base import BaseDetector, DetectionOutput, BatchDetectionOutput
+from tianwen.detectors.base import BaseDetector, BatchDetectionOutput, DetectionOutput
 from tianwen.engine.losses import DistillationLoss
 from tianwen.fusions.base import BaseFusion, FusionOutput
 from tianwen.vlms.base import BaseVLM
@@ -173,9 +173,7 @@ class KnowledgeDistillation(BaseFusion):
 
         # Extract detector features for distillation
         if self.distill_mode == "feature":
-            det_features = self.detector.extract_features(
-                images, feature_levels=["neck"]
-            )
+            det_features = self.detector.extract_features(images, feature_levels=["neck"])
 
         # 2. Get VLM features (teacher)
         with torch.no_grad():
@@ -191,23 +189,17 @@ class KnowledgeDistillation(BaseFusion):
 
         # Distillation loss
         if self.distill_mode == "feature":
-            distill_loss = self._compute_feature_distill_loss(
-                det_features, vlm_features
-            )
+            distill_loss = self._compute_feature_distill_loss(det_features, vlm_features)
             loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         elif self.distill_mode == "logit":
-            distill_loss = self._compute_logit_distill_loss(
-                det_output, vlm_features
-            )
+            distill_loss = self._compute_logit_distill_loss(det_output, vlm_features)
             loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         elif self.distill_mode == "response":
             # Response-based distillation requires text generation
             if targets is not None:
-                distill_loss = self._compute_response_distill_loss(
-                    images, det_output, targets
-                )
+                distill_loss = self._compute_response_distill_loss(images, det_output, targets)
                 loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         # Compute total loss

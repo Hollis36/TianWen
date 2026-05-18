@@ -1,6 +1,7 @@
 """Evaluation metrics for TianWen framework."""
 
 from typing import Dict, List, Optional, Tuple
+
 import numpy as np
 import torch
 from torch import Tensor
@@ -99,17 +100,21 @@ def compute_map(
             gt_mask = gt_labels == c
 
             if pred_mask.any():
-                all_preds[c].append({
-                    "img_idx": img_idx,
-                    "boxes": pred_boxes[pred_mask],
-                    "scores": pred_scores[pred_mask],
-                })
+                all_preds[c].append(
+                    {
+                        "img_idx": img_idx,
+                        "boxes": pred_boxes[pred_mask],
+                        "scores": pred_scores[pred_mask],
+                    }
+                )
 
             if gt_mask.any():
-                all_targets[c].append({
-                    "img_idx": img_idx,
-                    "boxes": gt_boxes[gt_mask],
-                })
+                all_targets[c].append(
+                    {
+                        "img_idx": img_idx,
+                        "boxes": gt_boxes[gt_mask],
+                    }
+                )
                 num_gt[c] += gt_mask.sum().item()
 
     # Compute AP for each class and IoU threshold
@@ -122,9 +127,7 @@ def compute_map(
             if num_gt[c] == 0:
                 continue
 
-            ap = _compute_class_ap(
-                all_preds[c], all_targets[c], num_gt[c], iou_thresh
-            )
+            ap = _compute_class_ap(all_preds[c], all_targets[c], num_gt[c], iou_thresh)
             aps.append(ap)
 
         if aps:

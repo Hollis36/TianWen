@@ -14,8 +14,8 @@ from torch import Tensor
 
 from tianwen.core.registry import FUSIONS
 from tianwen.detectors.base import BaseDetector, BatchDetectionOutput
-from tianwen.vlms.base import BaseVLM
 from tianwen.fusions.base import BaseFusion, FusionOutput
+from tianwen.vlms.base import BaseVLM
 
 
 class CrossAttentionBlock(nn.Module):
@@ -90,7 +90,7 @@ class CrossAttentionBlock(nn.Module):
         v = v.view(B, N_vlm, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Attention
-        scale = self.head_dim ** -0.5
+        scale = self.head_dim**-0.5
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
@@ -284,18 +284,14 @@ class FeatureFusion(BaseFusion):
             FusionOutput with detection results and losses
         """
         # Extract detector features at specified level
-        det_features = self.detector.extract_features(
-            images, feature_levels=[self.fusion_level]
-        )
+        det_features = self.detector.extract_features(images, feature_levels=[self.fusion_level])
 
         # Get VLM features
         with torch.no_grad():
             vlm_features = self.vlm.get_visual_features(images)
 
         # Apply fusion
-        fused_features = self._apply_fusion(
-            det_features[self.fusion_level], vlm_features
-        )
+        fused_features = self._apply_fusion(det_features[self.fusion_level], vlm_features)
 
         # Forward through detector with fused features
         # Note: This requires the detector to support feature injection
@@ -430,9 +426,7 @@ class MultiScaleFeatureFusion(BaseFusion):
     ) -> FusionOutput:
         """Multi-scale fusion forward pass."""
         # Get all features
-        det_features = self.detector.extract_features(
-            images, feature_levels=self.fusion_levels
-        )
+        det_features = self.detector.extract_features(images, feature_levels=self.fusion_levels)
 
         with torch.no_grad():
             vlm_features = self.vlm.get_visual_features(images)

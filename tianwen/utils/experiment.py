@@ -11,11 +11,11 @@ Features:
 - Ablation study support
 """
 
+import hashlib
 import json
 import logging
-import hashlib
 import shutil
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -37,6 +37,7 @@ class ExperimentResult:
         timestamp: When the experiment was run
         notes: Optional notes about the experiment
     """
+
     metrics: Dict[str, float] = field(default_factory=dict)
     config: Dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -165,10 +166,7 @@ class ExperimentManager:
 
     def _generate_versioned_id(self, name: str) -> str:
         """Generate versioned experiment ID."""
-        existing = [
-            k for k in self._experiments.keys()
-            if k.startswith(name)
-        ]
+        existing = [k for k in self._experiments.keys() if k.startswith(name)]
 
         if not existing:
             return f"{name}_v001"
@@ -338,10 +336,7 @@ class ExperimentManager:
         exp_ids = list(self._experiments.keys())
 
         if filter_fn:
-            exp_ids = [
-                exp_id for exp_id in exp_ids
-                if filter_fn(self._experiments[exp_id])
-            ]
+            exp_ids = [exp_id for exp_id in exp_ids if filter_fn(self._experiments[exp_id])]
 
         return sorted(exp_ids)
 
@@ -370,10 +365,7 @@ class ExperimentManager:
             exp_metrics = self._experiments[exp_id].metrics
 
             if metrics:
-                exp_metrics = {
-                    k: v for k, v in exp_metrics.items()
-                    if k in metrics
-                }
+                exp_metrics = {k: v for k, v in exp_metrics.items() if k in metrics}
 
             results[exp_id] = exp_metrics
 
@@ -455,10 +447,7 @@ class ExperimentManager:
         output_path = Path(output_path)
 
         if format == "json":
-            data = {
-                exp_id: result.to_dict()
-                for exp_id, result in self._experiments.items()
-            }
+            data = {exp_id: result.to_dict() for exp_id, result in self._experiments.items()}
             with open(output_path, "w") as f:
                 json.dump(data, f, indent=2)
 
@@ -613,9 +602,11 @@ class ResultsComparator:
         # Print rows
         for name in exp_names:
             values = [
-                f"{self._results[name].get(m, 0):>12.4f}"
-                if isinstance(self._results[name].get(m), (int, float))
-                else f"{str(self._results[name].get(m, '-')):>12}"
+                (
+                    f"{self._results[name].get(m, 0):>12.4f}"
+                    if isinstance(self._results[name].get(m), (int, float))
+                    else f"{str(self._results[name].get(m, '-')):>12}"
+                )
                 for m in all_metrics
             ]
             print(f"{name:<30} | " + " | ".join(values))
@@ -756,6 +747,7 @@ def ensure_reproducibility(seed: int = 42) -> None:
         seed: Random seed
     """
     import random
+
     import numpy as np
 
     random.seed(seed)

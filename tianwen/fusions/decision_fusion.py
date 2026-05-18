@@ -15,9 +15,9 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from tianwen.core.registry import FUSIONS
-from tianwen.detectors.base import BaseDetector, DetectionOutput, BatchDetectionOutput
-from tianwen.vlms.base import BaseVLM
+from tianwen.detectors.base import BaseDetector, BatchDetectionOutput, DetectionOutput
 from tianwen.fusions.base import BaseFusion, FusionOutput
+from tianwen.vlms.base import BaseVLM
 
 
 @FUSIONS.register("decision_fusion", aliases=["decision", "cascade"])
@@ -126,9 +126,7 @@ class DecisionFusion(BaseFusion):
 
             # Add verification training loss if applicable
             if self.score_fusion is not None:
-                verif_loss = self._compute_verification_loss(
-                    images, det_output, targets
-                )
+                verif_loss = self._compute_verification_loss(images, det_output, targets)
                 loss_dict["verification_loss"] = verif_loss
 
             loss_dict["total_loss"] = sum(loss_dict.values())
@@ -201,11 +199,13 @@ class DecisionFusion(BaseFusion):
             # Filter by minimum confidence
             mask = new_scores >= self.min_confidence
 
-            refined_outputs.append(DetectionOutput(
-                boxes=det.boxes[mask],
-                scores=new_scores[mask],
-                labels=det.labels[mask],
-            ))
+            refined_outputs.append(
+                DetectionOutput(
+                    boxes=det.boxes[mask],
+                    scores=new_scores[mask],
+                    labels=det.labels[mask],
+                )
+            )
 
         return BatchDetectionOutput(outputs=refined_outputs)
 
@@ -259,11 +259,15 @@ class DecisionFusion(BaseFusion):
         with torch.no_grad():
             for prompt, indices in prompt_to_indices.items():
                 # Single VLM call per unique prompt (same image)
-                response = self.vlm.generate(
-                    image,
-                    [prompt],
-                    max_new_tokens=20,
-                )[0].lower().strip()
+                response = (
+                    self.vlm.generate(
+                        image,
+                        [prompt],
+                        max_new_tokens=20,
+                    )[0]
+                    .lower()
+                    .strip()
+                )
 
                 score = self._parse_vlm_response(response)
                 for idx in indices:

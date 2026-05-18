@@ -26,6 +26,7 @@ class DetectionOutput:
         features: Optional intermediate features for fusion
         loss_dict: Optional loss dictionary during training
     """
+
     boxes: Tensor
     scores: Tensor
     labels: Tensor
@@ -38,10 +39,10 @@ class DetectionOutput:
             boxes=self.boxes.to(device),
             scores=self.scores.to(device),
             labels=self.labels.to(device),
-            features={k: v.to(device) for k, v in self.features.items()}
-            if self.features else None,
-            loss_dict={k: v.to(device) for k, v in self.loss_dict.items()}
-            if self.loss_dict else None,
+            features={k: v.to(device) for k, v in self.features.items()} if self.features else None,
+            loss_dict=(
+                {k: v.to(device) for k, v in self.loss_dict.items()} if self.loss_dict else None
+            ),
         )
 
     def filter_by_score(self, threshold: float) -> "DetectionOutput":
@@ -66,6 +67,7 @@ class BatchDetectionOutput:
         batch_features: Optional batch-level features
         batch_loss_dict: Optional aggregated loss dictionary
     """
+
     outputs: List[DetectionOutput]
     batch_features: Optional[Dict[str, Tensor]] = None
     batch_loss_dict: Optional[Dict[str, Tensor]] = None
