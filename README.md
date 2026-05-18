@@ -97,7 +97,7 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 > **Pending.** Comparison runs across COCO and rare-class subsets are in progress. We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them. Star/watch the repo to be notified when the first table lands.
 
-Tracking the work-in-progress numbers: [Discussions → Benchmarks](https://github.com/Hollis36/TianWen/discussions/categories/benchmarks).
+Tracking the work-in-progress numbers + how to contribute a row: [Discussion #11 — Benchmark Tracker](https://github.com/Hollis36/TianWen/discussions/11).
 
 ## 🗺️ Roadmap
 
