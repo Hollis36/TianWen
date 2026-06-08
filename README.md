@@ -27,7 +27,7 @@ Most VLM-enhanced detection projects glue Vision-Language Models and detectors t
 - 🎯 **Train-time intelligence, deploy-time speed** — Distill VLM knowledge into a fast detector during training; ship just the detector.
 - 🧪 **Three battle-tested strategies** — Knowledge distillation, feature fusion, and decision-level verification, covering the practical design space.
 
-> **Status: alpha.** Interfaces may shift. Benchmarks coming — see [Roadmap](#%EF%B8%8F-roadmap).
+> **Status: alpha.** Interfaces may shift. The training core is **real and tested**: YOLOv8/v11 and RT-DETR train through genuine `ultralytics` losses, feature fusion truly injects VLM features into the detector, and all strategies are exercised end-to-end (including a full PyTorch Lightning `Trainer` run) by the test suite — see [What works today](#-what-works-today). COCO benchmarks are still pending — see [Roadmap](#%EF%B8%8F-roadmap).
 
 ## ⚡ Quickstart
 
@@ -66,10 +66,23 @@ Every detector / VLM / fusion / dataset is a Hydra config group — override any
 
 | Detectors | Vision-Language Models | Fusion strategies |
 |---|---|---|
-| YOLOv8 / v11 (`ultralytics`) | Qwen2-VL (2B / 7B / 72B) | **Knowledge Distillation** — VLM as teacher, detector as student (feature / logit / response) |
-| RT-DETR | InternVL3 | **Feature Fusion** — Inject VLM features at backbone / neck / head |
-| RF-DETR (`autodistill-rfdetr`) | | **Decision Fusion** — VLM verifies and rescores detector boxes (offline / batch only — see notes) |
-| Grounding-DINO | | |
+| YOLOv8 / v11 (`ultralytics`) — **trainable** ✅ | Qwen2-VL (2B / 7B / 72B) | **Knowledge Distillation** — VLM as teacher, detector as student (feature / logit / response) |
+| RT-DETR (`ultralytics`) — **trainable** ✅ | InternVL3 | **Feature Fusion** — inject VLM features at backbone / neck / head (really propagated through the head) |
+| RF-DETR (`autodistill-rfdetr`) — inference / frozen | | **Decision Fusion** — VLM verifies and rescores detector boxes (offline / batch only — see notes) |
+| Grounding-DINO — inference / frozen | | |
+
+> **Trainable** detectors have real `ultralytics` training losses and are verified to learn (single-batch overfit + full Lightning `Trainer` smoke tests). RF-DETR and Grounding-DINO are wired for **frozen / inference** use (teacher, open-vocabulary, decision fusion); their training paths raise a clear error rather than silently optimizing a zero loss.
+
+## ✅ What works today
+
+Verified by the test suite (`pytest tests/`):
+
+- **Real detection training** — YOLOv8/v11 and RT-DETR compute genuine `ultralytics` losses; gradients flow and a single fixed batch overfits.
+- **Real feature fusion** — VLM features are injected into the detector's feature map and propagated through the head, so the fusion module is trained through the detection loss (not a no-op).
+- **Real distillation** — feature/logit distillation aligns detector and VLM representations with dimensions inferred from the actual detector.
+- **Real decision fusion** — the score-fusion module is trained to predict detection correctness from `[detector_score, vlm_score]` via ground-truth matching.
+- **Real evaluation** — COCO-style mAP via `torchmetrics` (no placeholder zeros).
+- **End-to-end** — a full PyTorch Lightning `Trainer` run (build → train step → val step → mAP) passes in CI.
 
 Adding a new detector or VLM is one decorator:
 
