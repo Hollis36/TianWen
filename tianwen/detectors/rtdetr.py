@@ -17,6 +17,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from tianwen.core.registry import DETECTORS
+from tianwen.detectors._ultralytics import build_loss_batch, split_loss_with_grad
 from tianwen.detectors.base import (
     BaseDetector,
     BatchDetectionOutput,
@@ -124,7 +125,7 @@ class RTDETRDetector(BaseDetector):
             )
 
         if checkpoint_path:
-            self.model = RTDETR(checkpoint_path)
+            rtdetr = RTDETR(checkpoint_path)
             logger.info(f"Loaded RT-DETR from checkpoint: {checkpoint_path}")
         elif pretrained:
             # Map model name to ultralytics weight file
@@ -133,13 +134,28 @@ class RTDETRDetector(BaseDetector):
                 "rtdetr-x": "rtdetr-x.pt",
             }
             weight_file = weight_map.get(model_name, f"{model_name}.pt")
-            self.model = RTDETR(weight_file)
+            rtdetr = RTDETR(weight_file)
             logger.info(f"Loaded pretrained RT-DETR: {weight_file}")
         else:
-            self.model = RTDETR(f"{model_name}.yaml")
+            rtdetr = RTDETR(f"{model_name}.yaml")
             logger.info(f"Loaded RT-DETR architecture: {model_name}")
 
-        self._torch_model = self.model.model
+        # The ultralytics ``RTDETR`` wrapper is an ``nn.Module`` whose ``.train()``
+        # launches dataset training; keep it out of nn.Module tracking (same
+        # rationale as the YOLO wrapper) and register only the underlying
+        # ``RTDETRDetectionModel``.
+        object.__setattr__(self, "_rtdetr", rtdetr)
+        self._torch_model = rtdetr.model
+
+        # RT-DETR's loss criterion reads ``model.nc``; architectures built from a
+        # YAML don't set it, so backfill from the detection head / num_classes.
+        if not hasattr(self._torch_model, "nc"):
+            self._torch_model.nc = getattr(self._torch_model.model[-1], "nc", self.num_classes)
+
+        # ultralytics loads checkpoints with parameters frozen — re-enable grads
+        # so the detector is actually trainable.
+        for param in self._torch_model.parameters():
+            param.requires_grad_(True)
 
     def _load_native_model(
         self,
@@ -186,40 +202,9 @@ class RTDETRDetector(BaseDetector):
         images: Tensor,
         targets: List[Dict[str, Tensor]],
     ) -> BatchDetectionOutput:
-        """Training forward pass."""
-        # RT-DETR training
-        preds = self._torch_model(images)
-
-        # Compute losses
-        loss_dict = self._compute_losses(preds, targets)
-
-        # Get detections for monitoring
-        outputs = []
-        with torch.no_grad():
-            results = self.model.predict(
-                images,
-                conf=self.conf_threshold,
-                verbose=False,
-            )
-            for result in results:
-                boxes = result.boxes
-                if len(boxes) > 0:
-                    outputs.append(
-                        DetectionOutput(
-                            boxes=boxes.xyxy,
-                            scores=boxes.conf,
-                            labels=boxes.cls.long(),
-                        )
-                    )
-                else:
-                    outputs.append(
-                        DetectionOutput(
-                            boxes=torch.zeros((0, 4), device=images.device),
-                            scores=torch.zeros(0, device=images.device),
-                            labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                        )
-                    )
-
+        """Training forward pass with the real RT-DETR loss."""
+        loss_dict = self._compute_losses(images, targets)
+        outputs = self._decode_detections(images)
         return BatchDetectionOutput(
             outputs=outputs,
             batch_loss_dict=loss_dict,
@@ -227,52 +212,76 @@ class RTDETRDetector(BaseDetector):
 
     def _forward_inference(self, images: Tensor) -> BatchDetectionOutput:
         """Inference forward pass."""
-        results = self.model.predict(
-            images,
-            conf=self.conf_threshold,
-            verbose=False,
-        )
+        return BatchDetectionOutput(outputs=self._decode_detections(images))
+
+    def _decode_detections(self, images: Tensor) -> List[DetectionOutput]:
+        """Decode RT-DETR detections from a non-destructive eval-mode forward.
+
+        RT-DETR is NMS-free: the eval forward returns ``[B, num_queries, 6]`` with
+        format ``[cx, cy, w, h, score, class]`` in normalized coordinates. We avoid
+        the ``RTDETR.predict()`` wrapper, which fuses layers and freezes gradients
+        (which would break training when validation interleaves it).
+        """
+        from ultralytics.utils import ops
+
+        _, _, height, width = images.shape
+        was_training = self._torch_model.training
+        self._torch_model.eval()
+        try:
+            with torch.no_grad():
+                raw = self._torch_model(images)
+                preds = raw[0] if isinstance(raw, (list, tuple)) else raw
+        finally:
+            if was_training:
+                self._torch_model.train()
 
         outputs = []
-        for result in results:
-            boxes = result.boxes
-            if len(boxes) > 0:
-                outputs.append(
-                    DetectionOutput(
-                        boxes=boxes.xyxy,
-                        scores=boxes.conf,
-                        labels=boxes.cls.long(),
-                    )
+        for det in preds:  # det: [num_queries, 6]
+            bbox, score, label = det.split((4, 1, 1), dim=-1)
+            bbox = ops.xywh2xyxy(bbox)  # normalized xyxy
+            score = score.squeeze(-1)
+            keep = score > self.conf_threshold
+            bbox = bbox[keep].clone()
+            # Scale normalized coords to pixel space.
+            bbox[:, [0, 2]] *= width
+            bbox[:, [1, 3]] *= height
+            outputs.append(
+                DetectionOutput(
+                    boxes=bbox,
+                    scores=score[keep],
+                    labels=label.squeeze(-1)[keep].long(),
                 )
-            else:
-                outputs.append(
-                    DetectionOutput(
-                        boxes=torch.zeros((0, 4), device=images.device),
-                        scores=torch.zeros(0, device=images.device),
-                        labels=torch.zeros(0, dtype=torch.long, device=images.device),
-                    )
-                )
-
-        return BatchDetectionOutput(outputs=outputs)
+            )
+        return outputs
 
     def _compute_losses(
         self,
-        predictions: Any,
+        images: Tensor,
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, Tensor]:
-        """Compute RT-DETR losses.
+        """Compute the real RT-DETR loss via ultralytics' ``RTDETRDetectionLoss``.
 
-        TODO: Implement actual RT-DETR loss computation (Hungarian matching + losses).
+        Args:
+            images: Input images ``[B, C, H, W]``.
+            targets: List of ``{"boxes": xyxy, "labels": ...}`` dicts.
+
+        Returns:
+            Dict of differentiable components (``loss_giou``/``loss_class``/
+            ``loss_bbox``) summing to the full RT-DETR loss (which internally
+            includes the auxiliary/denoising terms).
         """
-        logger.warning(
-            "Using placeholder RT-DETR loss (returns zeros). Implement _compute_losses() for real training."
+        _, _, height, width = images.shape
+        # The RT-DETR loss runs the model's forward internally, so it needs the
+        # model in train mode and the image tensor in the batch.
+        self._torch_model.train()
+        batch = build_loss_batch(targets, height, width, images.device)
+        batch["img"] = images
+
+        total_loss, components = self._torch_model.loss(batch)
+        # components = detached [loss_giou, loss_class, loss_bbox]
+        return split_loss_with_grad(
+            total_loss, components, ["loss_giou", "loss_class", "loss_bbox"]
         )
-        device = next(self.parameters()).device
-        return {
-            "loss_vfl": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_bbox": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_giou": torch.tensor(0.0, device=device, requires_grad=True),
-        }
 
     def extract_features(
         self,
@@ -311,10 +320,16 @@ class RTDETRDetector(BaseDetector):
 
     def compute_loss(
         self,
-        predictions: Any,
+        images: Any,
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, Tensor]:
-        return self._compute_losses(predictions, targets)
+        """Compute the real RT-DETR loss.
+
+        Unlike anchor-based detectors, RT-DETR's loss runs the model forward
+        internally, so this expects the input ``images`` tensor (not raw
+        predictions).
+        """
+        return self._compute_losses(images, targets)
 
     def get_optimizer_groups(
         self,

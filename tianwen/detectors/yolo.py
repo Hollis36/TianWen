@@ -12,6 +12,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from tianwen.core.registry import DETECTORS
+from tianwen.detectors._ultralytics import build_loss_batch
 from tianwen.detectors.base import (
     BaseDetector,
     BatchDetectionOutput,
@@ -170,47 +171,6 @@ class YOLODetector(BaseDetector):
         self._criterion_device = device
         return self._criterion
 
-    def _build_loss_batch(
-        self,
-        targets: List[Dict[str, Tensor]],
-        height: int,
-        width: int,
-        device: torch.device,
-    ) -> Dict[str, Tensor]:
-        """
-        Convert TianWen targets to the batch format ``v8DetectionLoss`` expects.
-
-        Targets use absolute ``xyxy`` boxes; ultralytics expects normalized
-        ``xywh`` boxes plus a flat ``batch_idx`` tensor mapping each box to its
-        image in the batch.
-        """
-        batch_idx, classes, boxes = [], [], []
-        for image_idx, target in enumerate(targets):
-            tgt_boxes = target["boxes"].to(device)
-            tgt_labels = target["labels"].to(device)
-            num = tgt_boxes.shape[0]
-            if num == 0:
-                continue
-            cx = (tgt_boxes[:, 0] + tgt_boxes[:, 2]) / 2 / width
-            cy = (tgt_boxes[:, 1] + tgt_boxes[:, 3]) / 2 / height
-            bw = (tgt_boxes[:, 2] - tgt_boxes[:, 0]) / width
-            bh = (tgt_boxes[:, 3] - tgt_boxes[:, 1]) / height
-            boxes.append(torch.stack([cx, cy, bw, bh], dim=1))
-            classes.append(tgt_labels.reshape(-1).float())
-            batch_idx.append(torch.full((num,), float(image_idx), device=device))
-
-        if boxes:
-            return {
-                "batch_idx": torch.cat(batch_idx),
-                "cls": torch.cat(classes),
-                "bboxes": torch.cat(boxes),
-            }
-        return {
-            "batch_idx": torch.zeros(0, device=device),
-            "cls": torch.zeros(0, device=device),
-            "bboxes": torch.zeros((0, 4), device=device),
-        }
-
     @property
     def backbone(self) -> nn.Module:
         """Return the backbone module for freezing."""
@@ -257,7 +217,7 @@ class YOLODetector(BaseDetector):
         preds = self._torch_model(images)
 
         # Build the ultralytics-format target batch and compute the real loss.
-        loss_batch = self._build_loss_batch(targets, height, width, images.device)
+        loss_batch = build_loss_batch(targets, height, width, images.device)
         loss_dict = self._compute_yolo_loss(preds, loss_batch)
 
         # Decode detections without mutating the model (see _decode_detections).
@@ -413,7 +373,7 @@ class YOLODetector(BaseDetector):
             device = predictions[0].device
         else:
             device = predictions.device
-        loss_batch = self._build_loss_batch(targets, height, width, device)
+        loss_batch = build_loss_batch(targets, height, width, device)
         return self._compute_yolo_loss(predictions, loss_batch)
 
     def _compute_yolo_loss(
