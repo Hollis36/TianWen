@@ -106,20 +106,110 @@ class YOLODetector(BaseDetector):
             )
 
         if checkpoint_path:
-            self.model = YOLO(checkpoint_path)
+            yolo = YOLO(checkpoint_path)
             logger.info(f"Loaded YOLO from checkpoint: {checkpoint_path}")
         elif pretrained:
             weight_file = self.MODEL_VARIANTS.get(model_name, f"{model_name}.pt")
-            self.model = YOLO(weight_file)
+            yolo = YOLO(weight_file)
             logger.info(f"Loaded pretrained YOLO: {weight_file}")
         else:
             # Load architecture only
             weight_file = self.MODEL_VARIANTS.get(model_name, f"{model_name}.yaml")
-            self.model = YOLO(weight_file.replace(".pt", ".yaml"))
+            yolo = YOLO(weight_file.replace(".pt", ".yaml"))
             logger.info(f"Loaded YOLO architecture: {model_name}")
 
-        # Extract PyTorch model for direct access
-        self._torch_model = self.model.model
+        # The ultralytics ``YOLO`` wrapper is itself an ``nn.Module`` whose
+        # ``.train()`` is overridden to launch *dataset training* — if it were
+        # registered as a child module, ``YOLODetector.train()`` would recurse
+        # into it and trigger the training pipeline instead of toggling mode.
+        # Store it outside nn.Module tracking and register only the underlying
+        # ``DetectionModel`` (the real parameter holder).
+        object.__setattr__(self, "_yolo", yolo)
+        self._torch_model = yolo.model
+
+        # ultralytics loads checkpoints in inference mode with every parameter
+        # frozen (requires_grad=False). Re-enable gradients so the detector can
+        # actually be trained; fusion strategies re-freeze it when requested.
+        for param in self._torch_model.parameters():
+            param.requires_grad_(True)
+
+        # Lazily-built ultralytics loss criterion (see _ensure_criterion).
+        self._criterion = None
+        self._criterion_device = None
+
+    def _ensure_criterion(self, device: torch.device) -> Any:
+        """
+        Lazily build the ultralytics ``v8DetectionLoss`` criterion.
+
+        The criterion captures the model's device and loss-gain hyperparameters
+        at construction time, so it is (re)built whenever the device changes.
+        Loaded checkpoints store ``model.args`` as a plain ``dict`` (often with
+        ``box``/``cls``/``dfl`` gains set to ``None``); ``v8DetectionLoss`` reads
+        them as attributes, so we merge defaults and wrap them in a namespace.
+        """
+        if self._criterion is not None and self._criterion_device == device:
+            return self._criterion
+
+        from ultralytics.utils import DEFAULT_CFG_DICT, IterableSimpleNamespace
+        from ultralytics.utils.loss import v8DetectionLoss
+
+        args = self._torch_model.args
+        if isinstance(args, dict):
+            merged = {**DEFAULT_CFG_DICT, **args}
+        elif hasattr(args, "__dict__"):
+            merged = {**DEFAULT_CFG_DICT, **vars(args)}
+        else:
+            merged = dict(DEFAULT_CFG_DICT)
+        # Loss gains may be present but None on loaded checkpoints — backfill them.
+        for key in ("box", "cls", "dfl"):
+            if merged.get(key) is None:
+                merged[key] = DEFAULT_CFG_DICT[key]
+        self._torch_model.args = IterableSimpleNamespace(**merged)
+
+        self._criterion = v8DetectionLoss(self._torch_model)
+        self._criterion_device = device
+        return self._criterion
+
+    def _build_loss_batch(
+        self,
+        targets: List[Dict[str, Tensor]],
+        height: int,
+        width: int,
+        device: torch.device,
+    ) -> Dict[str, Tensor]:
+        """
+        Convert TianWen targets to the batch format ``v8DetectionLoss`` expects.
+
+        Targets use absolute ``xyxy`` boxes; ultralytics expects normalized
+        ``xywh`` boxes plus a flat ``batch_idx`` tensor mapping each box to its
+        image in the batch.
+        """
+        batch_idx, classes, boxes = [], [], []
+        for image_idx, target in enumerate(targets):
+            tgt_boxes = target["boxes"].to(device)
+            tgt_labels = target["labels"].to(device)
+            num = tgt_boxes.shape[0]
+            if num == 0:
+                continue
+            cx = (tgt_boxes[:, 0] + tgt_boxes[:, 2]) / 2 / width
+            cy = (tgt_boxes[:, 1] + tgt_boxes[:, 3]) / 2 / height
+            bw = (tgt_boxes[:, 2] - tgt_boxes[:, 0]) / width
+            bh = (tgt_boxes[:, 3] - tgt_boxes[:, 1]) / height
+            boxes.append(torch.stack([cx, cy, bw, bh], dim=1))
+            classes.append(tgt_labels.reshape(-1).float())
+            batch_idx.append(torch.full((num,), float(image_idx), device=device))
+
+        if boxes:
+            return {
+                "batch_idx": torch.cat(batch_idx),
+                "cls": torch.cat(classes),
+                "bboxes": torch.cat(boxes),
+            }
+        return {
+            "batch_idx": torch.zeros(0, device=device),
+            "cls": torch.zeros(0, device=device),
+            "bboxes": torch.zeros((0, 4), device=device),
+        }
 
     @property
     def backbone(self) -> nn.Module:
@@ -157,47 +247,21 @@ class YOLODetector(BaseDetector):
         images: Tensor,
         targets: List[Dict[str, Tensor]],
     ) -> BatchDetectionOutput:
-        """Forward pass for training with loss computation."""
-        # Convert targets to YOLO format
-        # YOLO expects: [batch_idx, class_id, x_center, y_center, width, height]
-        yolo_targets = self._convert_targets_to_yolo(targets, images.shape)
+        """Forward pass for training with real ultralytics loss computation."""
+        _, _, height, width = images.shape
 
-        # Run through model
-        # Note: This is a simplified version. Actual training may need
-        # to use ultralytics training pipeline or custom loss computation.
+        # Train-mode forward returns the raw head outputs needed by the loss.
+        # Force train mode so this works even if a prior predict() left the
+        # underlying model in eval mode.
+        self._torch_model.train()
         preds = self._torch_model(images)
 
-        # Compute losses (placeholder - actual implementation depends on YOLO version)
-        loss_dict = self._compute_yolo_loss(preds, yolo_targets)
+        # Build the ultralytics-format target batch and compute the real loss.
+        loss_batch = self._build_loss_batch(targets, height, width, images.device)
+        loss_dict = self._compute_yolo_loss(preds, loss_batch)
 
-        # Get detections for the batch
-        outputs = []
-        with torch.no_grad():
-            results = self.model.predict(
-                images,
-                conf=self.conf_threshold,
-                iou=self.iou_threshold,
-                verbose=False,
-            )
-            for result in results:
-                boxes = result.boxes
-                outputs.append(
-                    DetectionOutput(
-                        boxes=(
-                            boxes.xyxy
-                            if len(boxes) > 0
-                            else torch.zeros((0, 4), device=images.device)
-                        ),
-                        scores=(
-                            boxes.conf if len(boxes) > 0 else torch.zeros(0, device=images.device)
-                        ),
-                        labels=(
-                            boxes.cls.long()
-                            if len(boxes) > 0
-                            else torch.zeros(0, dtype=torch.long, device=images.device)
-                        ),
-                    )
-                )
+        # Decode detections without mutating the model (see _decode_detections).
+        outputs = self._decode_detections(images)
 
         return BatchDetectionOutput(
             outputs=outputs,
@@ -206,23 +270,46 @@ class YOLODetector(BaseDetector):
 
     def _forward_inference(self, images: Tensor) -> BatchDetectionOutput:
         """Forward pass for inference."""
-        # Run YOLO prediction
-        results = self.model.predict(
-            images,
-            conf=self.conf_threshold,
-            iou=self.iou_threshold,
-            verbose=False,
-        )
+        return BatchDetectionOutput(outputs=self._decode_detections(images))
+
+    def _decode_detections(self, images: Tensor) -> List[DetectionOutput]:
+        """
+        Decode NMS'd detections from a plain eval-mode forward pass.
+
+        This deliberately avoids the ultralytics ``YOLO.predict()`` wrapper,
+        which fuses Conv+BN layers and sets ``requires_grad=False`` on every
+        parameter. That side effect is harmless for a pure-inference model, but
+        it would permanently break training if it ran inside a training step or
+        during validation between training epochs. A direct eval-mode forward
+        plus NMS produces equivalent detections while leaving the model intact.
+        """
+        from ultralytics.utils import nms
+
+        was_training = self._torch_model.training
+        self._torch_model.eval()
+        try:
+            with torch.no_grad():
+                raw = self._torch_model(images)
+                preds = raw[0] if isinstance(raw, (list, tuple)) else raw
+                detections = nms.non_max_suppression(
+                    preds,
+                    self.conf_threshold,
+                    self.iou_threshold,
+                    max_det=300,
+                )
+        finally:
+            if was_training:
+                self._torch_model.train()
 
         outputs = []
-        for result in results:
-            boxes = result.boxes
-            if len(boxes) > 0:
+        for det in detections:
+            if det is not None and det.shape[0] > 0:
+                # det rows are [x1, y1, x2, y2, conf, cls]
                 outputs.append(
                     DetectionOutput(
-                        boxes=boxes.xyxy,
-                        scores=boxes.conf,
-                        labels=boxes.cls.long(),
+                        boxes=det[:, :4],
+                        scores=det[:, 4],
+                        labels=det[:, 5].long(),
                     )
                 )
             else:
@@ -234,7 +321,7 @@ class YOLODetector(BaseDetector):
                     )
                 )
 
-        return BatchDetectionOutput(outputs=outputs)
+        return outputs
 
     def extract_features(
         self,
@@ -307,73 +394,56 @@ class YOLODetector(BaseDetector):
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, Tensor]:
         """
-        Compute YOLO detection losses.
+        Compute YOLO detection losses from train-mode predictions.
 
-        Note: This is a simplified implementation. For full training,
-        consider using the ultralytics training pipeline.
+        Args:
+            predictions: Raw head outputs from a train-mode forward pass
+                (the dict returned by ``self._torch_model(images)`` in train
+                mode).
+            targets: List of ``{"boxes": xyxy, "labels": ...}``; boxes are
+                assumed to be in the detector's ``input_size`` coordinate space.
+
+        The training loop normally computes losses inside :meth:`_forward_train`;
+        this method exposes the same real loss for standalone use.
         """
-        # Convert targets
-        yolo_targets = self._convert_targets_to_yolo(targets, predictions.shape)
-        return self._compute_yolo_loss(predictions, yolo_targets)
-
-    def _convert_targets_to_yolo(
-        self,
-        targets: List[Dict[str, Tensor]],
-        image_shape: torch.Size,
-    ) -> Tensor:
-        """Convert targets from xyxy format to YOLO format."""
-        _, _, H, W = image_shape
-        all_targets = []
-
-        for batch_idx, target in enumerate(targets):
-            boxes = target["boxes"]  # [N, 4] in xyxy format
-            labels = target["labels"]  # [N]
-
-            if len(boxes) == 0:
-                continue
-
-            # Convert xyxy to xywh normalized
-            x_center = (boxes[:, 0] + boxes[:, 2]) / 2 / W
-            y_center = (boxes[:, 1] + boxes[:, 3]) / 2 / H
-            width = (boxes[:, 2] - boxes[:, 0]) / W
-            height = (boxes[:, 3] - boxes[:, 1]) / H
-
-            # Create YOLO format: [batch_idx, class_id, x, y, w, h]
-            batch_indices = torch.full((len(boxes),), batch_idx, device=boxes.device)
-            yolo_boxes = torch.stack(
-                [batch_indices, labels.float(), x_center, y_center, width, height], dim=1
-            )
-
-            all_targets.append(yolo_boxes)
-
-        if all_targets:
-            return torch.cat(all_targets, dim=0)
-        return torch.zeros(
-            (0, 6), device=image_shape.device if hasattr(image_shape, "device") else "cpu"
-        )
+        height, width = self.input_size
+        if isinstance(predictions, dict):
+            device = predictions["scores"].device
+        elif isinstance(predictions, (list, tuple)):
+            device = predictions[0].device
+        else:
+            device = predictions.device
+        loss_batch = self._build_loss_batch(targets, height, width, device)
+        return self._compute_yolo_loss(predictions, loss_batch)
 
     def _compute_yolo_loss(
         self,
         predictions: Any,
-        targets: Tensor,
+        loss_batch: Dict[str, Tensor],
     ) -> Dict[str, Tensor]:
         """
-        Compute YOLO losses.
+        Compute real YOLO detection losses via ultralytics ``v8DetectionLoss``.
 
-        TODO: Implement actual YOLO loss computation using ultralytics
-        loss functions or a custom implementation.
+        Args:
+            predictions: Raw head outputs from a train-mode forward pass.
+            loss_batch: Target batch produced by :meth:`_build_loss_batch`.
+
+        Returns:
+            Dict of differentiable per-component losses (``box_loss``,
+            ``cls_loss``, ``dfl_loss``). Each value is already scaled by the
+            criterion's batch-size factor and carries gradients back to the
+            detector, so summing them yields the full detection loss. Splitting
+            the loss this way keeps the per-component breakdown visible in logs
+            while remaining safe for callers that sum ``batch_loss_dict``.
         """
-        # Placeholder losses - returns zero losses
-        logger.warning(
-            "Using placeholder YOLO loss (returns zeros). Implement _compute_yolo_loss() for real training."
-        )
-        device = (
-            predictions[0].device if isinstance(predictions, (list, tuple)) else predictions.device
-        )
+        criterion = self._ensure_criterion(loss_batch["bboxes"].device)
+        # v8DetectionLoss returns (loss_vec * batch_size, loss_vec.detach()),
+        # where loss_vec = [box, cls, dfl]. The first tensor is differentiable.
+        loss_vec, _ = criterion(predictions, loss_batch)
         return {
-            "box_loss": torch.tensor(0.0, device=device, requires_grad=True),
-            "cls_loss": torch.tensor(0.0, device=device, requires_grad=True),
-            "dfl_loss": torch.tensor(0.0, device=device, requires_grad=True),
+            "box_loss": loss_vec[0],
+            "cls_loss": loss_vec[1],
+            "dfl_loss": loss_vec[2],
         }
 
     def get_optimizer_groups(
