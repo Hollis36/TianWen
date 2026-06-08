@@ -285,7 +285,11 @@ class DetectorVLMModule(pl.LightningModule):
         targets: List[Dict[str, Tensor]],
     ) -> Dict[str, float]:
         """
-        Compute detection metrics (mAP, precision, recall).
+        Compute lightweight precision/recall/F1 for quick monitoring.
+
+        COCO-style mAP@50/50:95 is computed separately and authoritatively via
+        ``self.map_metric`` (torchmetrics); these cheaper proxies are logged
+        every step for at-a-glance feedback.
 
         Args:
             outputs: Model outputs
@@ -296,8 +300,6 @@ class DetectorVLMModule(pl.LightningModule):
         """
         metrics = {}
 
-        # Placeholder for actual mAP computation
-        # In practice, use torchmetrics or pycocotools
         det_output = outputs.detection_output
 
         total_pred = 0
@@ -315,7 +317,7 @@ class DetectorVLMModule(pl.LightningModule):
             total_pred += len(pred_boxes)
             total_gt += len(gt_boxes)
 
-            # Simple matching (placeholder)
+            # Greedy IoU>0.5 + same-class matching for the proxy precision/recall.
             if len(pred_boxes) > 0 and len(gt_boxes) > 0:
                 # Count matches with IoU > 0.5
                 matches = self._count_matches(pred_boxes, pred_labels, gt_boxes, gt_labels)
