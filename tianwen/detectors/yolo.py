@@ -90,6 +90,10 @@ class YOLODetector(BaseDetector):
         # Feature extraction hooks
         self._feature_hooks = {}
         self._features = {}
+        self._feature_channel_cache: Dict[str, int] = {}
+
+        # Permanent hooks enabling feature-fusion injection (no-op until used).
+        self._setup_injection_hooks()
 
     def _load_model(
         self,
@@ -314,6 +318,16 @@ class YOLODetector(BaseDetector):
 
         return features
 
+    # Which model layer corresponds to each named feature level.
+    # This mapping depends on the YOLOv8/v11 architecture.
+    LAYER_MAPPING = {
+        "backbone": 9,  # End of backbone
+        "neck": 12,  # SPPF output
+        "p3": 15,  # P3 features
+        "p4": 18,  # P4 features
+        "p5": 21,  # P5 features
+    }
+
     def _setup_feature_hooks(self, feature_levels: List[str]) -> None:
         """Setup forward hooks to capture intermediate features."""
         # Clear existing hooks
@@ -321,19 +335,9 @@ class YOLODetector(BaseDetector):
             hook.remove()
         self._feature_hooks.clear()
 
-        # Define which layers correspond to which feature levels
-        # This mapping depends on the specific YOLO architecture
-        layer_mapping = {
-            "backbone": 9,  # End of backbone
-            "neck": 12,  # SPPF output
-            "p3": 15,  # P3 features
-            "p4": 18,  # P4 features
-            "p5": 21,  # P5 features
-        }
-
         for level in feature_levels:
-            if level in layer_mapping:
-                layer_idx = layer_mapping[level]
+            if level in self.LAYER_MAPPING:
+                layer_idx = self.LAYER_MAPPING[level]
                 if layer_idx < len(self._torch_model.model):
                     hook = self._torch_model.model[layer_idx].register_forward_hook(
                         self._make_hook(level)
@@ -347,6 +351,43 @@ class YOLODetector(BaseDetector):
             self._features[name] = output
 
         return hook
+
+    def _setup_injection_hooks(self) -> None:
+        """Register permanent hooks that apply feature injectors during forward.
+
+        Each hook returns the (possibly transformed) layer output, which PyTorch
+        substitutes downstream — so an injected feature propagates through the
+        detection head. The hook is a no-op until an injector is registered for
+        its level via :meth:`register_feature_injector`.
+        """
+        for level, layer_idx in self.LAYER_MAPPING.items():
+            if layer_idx < len(self._torch_model.model):
+                self._torch_model.model[layer_idx].register_forward_hook(
+                    self._make_injection_hook(level)
+                )
+
+    def _make_injection_hook(self, level: str):
+        """Create a forward hook that applies a registered injector for ``level``."""
+
+        def hook(module, inputs, output):
+            return self._apply_feature_injector(level, output)
+
+        return hook
+
+    def supports_feature_injection(self) -> bool:
+        return True
+
+    def get_feature_channels(self, level: str) -> int:
+        """Return the channel count at ``level``, inferred once via a dry run."""
+        if level not in self._feature_channel_cache:
+            device = next(self._torch_model.parameters()).device
+            dummy = torch.zeros(1, 3, *self.input_size, device=device)
+            feats = self.extract_features(dummy, feature_levels=[level])
+            tensor = feats.get(level)
+            self._feature_channel_cache[level] = (
+                tensor.shape[1] if tensor is not None and tensor.dim() == 4 else self.feature_dim
+            )
+        return self._feature_channel_cache[level]
 
     def compute_loss(
         self,
