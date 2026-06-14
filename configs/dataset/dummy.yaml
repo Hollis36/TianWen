@@ -1,0 +1,23 @@
+# Synthetic ("dummy") Dataset Configuration
+#
+# Generates random images and boxes on the fly — no data download required.
+# Use it to smoke-run the full training pipeline on CPU, e.g.:
+#
+#   python tools/train.py dataset=dummy detector=yolov8 vlm=clip \
+#       fusion=feature_fusion trainer.fast_dev_run=true trainer.accelerator=cpu
+#
+# It is for plumbing/sanity checks only — the data is meaningless, so metrics
+# carry no signal.
+
+name: dummy
+
+num_classes: 80
+image_size: [640, 640]
+
+batch_size: ${train.batch_size}
+num_workers: 0
+
+# Synthetic sample counts and max boxes per image
+train_samples: 64
+val_samples: 16
+max_boxes: 5
