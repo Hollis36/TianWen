@@ -35,10 +35,25 @@ from tianwen.detectors.base import DetectionOutput
 
 
 def load_model(checkpoint_path: str, device: str = "cuda"):
-    """Load trained model from checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    """Load a model for inference.
 
-    # Extract configs from checkpoint
+    Supports two checkpoint kinds:
+    - a standalone detector exported with ``tools/export.py`` (no VLM needed —
+      the recommended deploy artifact), and
+    - a full Lightning fusion checkpoint (rebuilds detector + VLM + fusion).
+    """
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    # Standalone detector checkpoint — load just the detector, no VLM.
+    if isinstance(checkpoint, dict) and checkpoint.get("format") == "tianwen-detector-v1":
+        from tianwen.utils.export import load_detector_checkpoint
+
+        detector = load_detector_checkpoint(checkpoint_path, map_location=device)
+        detector.to(device)
+        print("Loaded standalone detector (VLM-free deploy checkpoint).")
+        return detector
+
+    # Full fusion checkpoint.
     hparams = checkpoint.get("hyper_parameters", {})
 
     detector = DETECTORS.build(hparams.get("detector_cfg", {"type": "yolov8"}))
@@ -67,11 +82,13 @@ def preprocess_image(
     image = Image.open(image_path).convert("RGB")
     original_size = image.size
 
-    transform = T.Compose([
-        T.Resize(size),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    transform = T.Compose(
+        [
+            T.Resize(size),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
     tensor = transform(image).unsqueeze(0)
 
@@ -104,10 +121,7 @@ def draw_boxes(
         else:
             label_text = f"Class {label}: {score:.2f}"
 
-        cv2.putText(
-            image, label_text, (x1, y1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
-        )
+        cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     return image
 
@@ -167,7 +181,10 @@ def main():
         image_np = np.array(pil_image)
         image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
         result = draw_boxes(
-            image_np, boxes, scores, labels,
+            image_np,
+            boxes,
+            scores,
+            labels,
             conf_threshold=args.conf_threshold,
         )
 
