@@ -60,11 +60,13 @@ Smoke-run the **entire** pipeline (real YOLO + a real CLIP VLM + fusion) on synt
 
 ```bash
 python tools/train.py \
-    dataset=dummy detector=yolov8 vlm=clip fusion=feature_fusion \
-    trainer.fast_dev_run=true trainer.accelerator=cpu
+    dataset=dummy detector=yolov8 detector.model_name=yolov8n vlm=clip \
+    fusion=feature_fusion trainer.fast_dev_run=true trainer.accelerator=cpu
 ```
 
 `dataset=dummy` generates random images/boxes on the fly and `vlm=clip` uses a lightweight, CPU-friendly CLIP teacher — so you can verify the framework end-to-end before touching real data or a 7B VLM.
+
+Want to validate on free online GPUs (Kaggle / Colab / Lightning AI) and get a first benchmark? See [docs/ONLINE_VALIDATION.md](docs/ONLINE_VALIDATION.md).
 
 ### Compose from the command line
 
