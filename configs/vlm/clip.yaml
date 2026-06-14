@@ -1,0 +1,23 @@
+# CLIP Vision-Language Model Configuration
+#
+# CLIP is a lightweight, CPU-friendly VLM teacher for feature-level fusion
+# (knowledge distillation, feature fusion). Unlike the large generative VLMs it
+# runs without a GPU, which makes it a good default for getting a fusion
+# pipeline working end to end.
+#
+# CLIP is contrastive (not generative), so it is not suitable for generate-based
+# decision fusion.
+
+type: clip
+
+# Any Hugging Face CLIP model id, e.g.:
+#   openai/clip-vit-base-patch32   (vision hidden size 768)
+#   openai/clip-vit-large-patch14  (vision hidden size 1024)
+model_name: openai/clip-vit-base-patch32
+
+# Device and precision
+device: cpu
+dtype: float32
+
+# Freeze VLM during training (recommended — CLIP is used as a frozen teacher)
+freeze: true
