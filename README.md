@@ -40,14 +40,19 @@ pip install -e .
 # 2. Train with a pre-defined recipe (YOLOv8-L + Qwen2-VL-7B + feature distillation)
 python tools/train.py experiment=yolov8_qwen_distill
 
-# 3. Run inference with the trained detector
-python tools/demo.py \
+# 3. Ship just the detector — export a VLM-free checkpoint
+python tools/export.py \
     --checkpoint runs/yolov8l_qwen2vl_distill/last.ckpt \
+    --output detector.pt
+
+# 4. Run inference with the distilled detector (no VLM needed)
+python tools/demo.py \
+    --checkpoint detector.pt \
     --image path/to/your-image.jpg \
     --output result.jpg
 ```
 
-That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and saves a regular detector checkpoint you can hand off to your existing inference stack.
+That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and `tools/export.py` saves a standalone detector checkpoint (no VLM weights or dependencies) you can hand off to your existing inference stack.
 
 ### Run it now — CPU, no data, no GPU VLM
 
