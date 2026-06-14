@@ -49,6 +49,18 @@ python tools/demo.py \
 
 That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and saves a regular detector checkpoint you can hand off to your existing inference stack.
 
+### Run it now — CPU, no data, no GPU VLM
+
+Smoke-run the **entire** pipeline (real YOLO + a real CLIP VLM + fusion) on synthetic data in seconds — no dataset and no large model required:
+
+```bash
+python tools/train.py \
+    dataset=dummy detector=yolov8 vlm=clip fusion=feature_fusion \
+    trainer.fast_dev_run=true trainer.accelerator=cpu
+```
+
+`dataset=dummy` generates random images/boxes on the fly and `vlm=clip` uses a lightweight, CPU-friendly CLIP teacher — so you can verify the framework end-to-end before touching real data or a 7B VLM.
+
 ### Compose from the command line
 
 ```bash
