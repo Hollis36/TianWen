@@ -158,15 +158,15 @@ def main():
         tensor, pil_image, orig_size = preprocess_image(str(image_path))
         tensor = tensor.to(args.device)
 
-        # Inference
+        # Inference — works for a standalone detector or a full fusion model.
+        if hasattr(model, "conf_threshold"):
+            model.conf_threshold = args.conf_threshold
         with torch.no_grad():
-            outputs = model.fusion.inference(
-                tensor,
-                conf_threshold=args.conf_threshold,
-            )
+            result = model(tensor)
 
-        # Get detections
-        det = outputs.outputs[0]
+        # A fusion returns a FusionOutput; a detector returns a BatchDetectionOutput.
+        det_batch = getattr(result, "detection_output", result)
+        det = det_batch.outputs[0]
         boxes = det.boxes.cpu().numpy()
         scores = det.scores.cpu().numpy()
         labels = det.labels.cpu().numpy()
