@@ -23,14 +23,19 @@ VLM_MODEL = "openai/clip-vit-base-patch32"
 DETECTOR = "yolov8n"
 
 # --- Set up TianWen -------------------------------------------------------
-# IMPORTANT: do not reinstall torch/torchvision — Kaggle ships GPU-matched builds,
-# and replacing them causes "CUDA error: no kernel image is available". Install
-# the package without deps, then add only the extra runtime deps (which keep the
-# already-satisfied torch).
+# Pin a torch build whose CUDA binaries cover every GPU Kaggle currently hands
+# out: P100 (sm_60), T4 (sm_75), L4 (sm_89), A100 (sm_80). Kaggle's default torch
+# (cu128) dropped sm_60, so a P100 kernel fails with "no kernel image" — pinning
+# torch 2.5.1/cu121 fixes that and makes the run torch-version-reproducible.
 if not os.path.exists("TianWen"):
     subprocess.run(
         ["git", "clone", "--depth", "1", "https://github.com/Hollis36/TianWen.git"], check=True
     )
+subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q", "torch==2.5.1", "torchvision==0.20.1",
+     "--index-url", "https://download.pytorch.org/whl/cu121"],
+    check=True,
+)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", "TianWen"], check=True)
 subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
