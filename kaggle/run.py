@@ -23,12 +23,34 @@ VLM_MODEL = "openai/clip-vit-base-patch32"
 DETECTOR = "yolov8n"
 
 # --- Set up TianWen -------------------------------------------------------
+# IMPORTANT: do not reinstall torch/torchvision — Kaggle ships GPU-matched builds,
+# and replacing them causes "CUDA error: no kernel image is available". Install
+# the package without deps, then add only the extra runtime deps (which keep the
+# already-satisfied torch).
 if not os.path.exists("TianWen"):
     subprocess.run(
         ["git", "clone", "--depth", "1", "https://github.com/Hollis36/TianWen.git"], check=True
     )
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", "TianWen"], check=True)
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", "TianWen"], check=True)
+subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q",
+     "ultralytics", "pytorch-lightning", "torchmetrics", "omegaconf", "hydra-core",
+     "transformers", "pycocotools"],
+    check=True,
+)
 sys.path.insert(0, "TianWen")
+
+import torch  # noqa: E402
+
+print(
+    f"torch {torch.__version__} | cuda_available={torch.cuda.is_available()} | "
+    f"device={torch.cuda.get_device_name() if torch.cuda.is_available() else 'cpu'}",
+    flush=True,
+)
+if torch.cuda.is_available():
+    # Surface a torch/GPU arch mismatch immediately, with a clear message.
+    _ = (torch.zeros(1, device="cuda") + 1).cpu()
+    print("CUDA sanity check passed.", flush=True)
 
 from tianwen.datasets import build_datamodule, discover_coco  # noqa: E402
 from tianwen.utils.ablation import run_distillation_ablation  # noqa: E402
