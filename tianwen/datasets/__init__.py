@@ -2,6 +2,7 @@
 
 from tianwen.datasets.base import BaseDataset
 from tianwen.datasets.coco import COCODataModule, COCODataset
+from tianwen.datasets.discovery import discover_coco
 from tianwen.datasets.synthetic import SyntheticDataModule, SyntheticDetectionDataset
 from tianwen.datasets.transforms import build_transforms
 
@@ -11,6 +12,7 @@ __all__ = [
     "COCODataModule",
     "SyntheticDetectionDataset",
     "SyntheticDataModule",
+    "discover_coco",
     "build_transforms",
     "build_datamodule",
 ]
