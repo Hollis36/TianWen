@@ -130,7 +130,21 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **Pending.** Comparison runs across COCO and rare-class subsets are in progress. We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them. Star/watch the repo to be notified when the first table lands.
+> **Numbers pending.** We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them.
+
+The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
+
+```bash
+python tools/ablation.py detector=yolov8 vlm=clip dataset=coco \
+    ablation.max_steps=500 ablation.limit_val_batches=50
+```
+
+(or the ablation cell in [the validation notebook](notebooks/validate_tianwen.ipynb)). It prints baseline / distilled / Δ mAP. The table to fill:
+
+| Detector | VLM | Fusion | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
+|---|---|---|---|---|---|
+| YOLOv8n | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
+| RT-DETR-l | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
 
 Tracking the work-in-progress numbers + how to contribute a row: [Discussion #11 — Benchmark Tracker](https://github.com/Hollis36/TianWen/discussions/11).
 

@@ -241,10 +241,22 @@ class DetectorVLMModule(pl.LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         """Compute and log epoch-level mAP metrics."""
+        self._compute_and_log_map("val")
+
+    def on_test_epoch_end(self) -> None:
+        """Compute and log epoch-level mAP metrics for the test loop."""
+        self._compute_and_log_map("test")
+
+    def _compute_and_log_map(self, stage: str) -> None:
+        """Compute COCO-style mAP from the accumulated metric and log it.
+
+        Shared by validation and test so ``trainer.test()`` (e.g. tools/eval.py)
+        reports real mAP, not just the cheap proxy metrics.
+        """
         if self.map_metric is not None:
             map_results = self.map_metric.compute()
-            self.log("val/mAP50", map_results.get("map_50", torch.tensor(0.0)), prog_bar=True)
-            self.log("val/mAP50_95", map_results.get("map", torch.tensor(0.0)), prog_bar=True)
+            self.log(f"{stage}/mAP50", map_results.get("map_50", torch.tensor(0.0)), prog_bar=True)
+            self.log(f"{stage}/mAP50_95", map_results.get("map", torch.tensor(0.0)), prog_bar=True)
             self.map_metric.reset()
 
     def _format_for_map(

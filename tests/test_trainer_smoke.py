@@ -76,6 +76,9 @@ class _TinyDataModule(pl.LightningDataModule):
     def val_dataloader(self):
         return DataLoader(_TinyDataset(), batch_size=2, collate_fn=_collate)
 
+    def test_dataloader(self):
+        return DataLoader(_TinyDataset(), batch_size=2, collate_fn=_collate)
+
 
 @pytest.mark.parametrize(
     "fusion_cfg",
@@ -113,3 +116,35 @@ def test_trainer_fast_dev_run(fusion_cfg):
     )
     # Completing fit() exercises training + validation steps end to end.
     trainer.fit(module, _TinyDataModule())
+
+
+def test_trainer_test_reports_real_map():
+    """trainer.test() must report real torchmetrics mAP (the benchmark path)."""
+    from tianwen.engine.lightning_module import DetectorVLMModule
+
+    try:
+        module = DetectorVLMModule(
+            detector_cfg={
+                "type": "yolov8",
+                "model_name": "yolov8n",
+                "num_classes": 5,
+                "input_size": (320, 320),
+                "pretrained": True,
+            },
+            vlm_cfg={"type": "trainer_smoke_vlm", "vision_hidden_size": 32},
+            fusion_cfg={"type": "feature_fusion", "fusion_level": "neck"},
+            warmup_epochs=0,
+        )
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Could not build module (weights/deps unavailable): {exc}")
+
+    trainer = pl.Trainer(
+        accelerator="cpu",
+        devices=1,
+        logger=False,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+    )
+    results = trainer.test(module, datamodule=_TinyDataModule())
+    keys = results[0].keys()
+    assert "test/mAP50" in keys and "test/mAP50_95" in keys
