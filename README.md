@@ -146,6 +146,10 @@ python tools/ablation.py detector=yolov8 vlm=clip dataset=coco \
 | YOLOv8n | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
 | RT-DETR-l | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
 
+For a **more publishable angle than COCO**, run the same ablation on industrial
+defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —
+see [docs/INDUSTRIAL_DATASETS.md](docs/INDUSTRIAL_DATASETS.md).
+
 Tracking the work-in-progress numbers + how to contribute a row: [Discussion #11 — Benchmark Tracker](https://github.com/Hollis36/TianWen/discussions/11).
 
 ## 🗺️ Roadmap
