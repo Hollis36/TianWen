@@ -250,16 +250,14 @@ class RFDETRDetector(BaseDetector):
         if hasattr(self.model, "compute_loss"):
             return self.model.compute_loss(outputs, targets)
 
-        # TODO: Implement actual RF-DETR loss computation.
-        logger.warning(
-            "Using placeholder RF-DETR loss (returns zeros). Implement _compute_losses() for real training."
+        # Fail loudly rather than silently "training" on a zero loss: RF-DETR
+        # fine-tuning is not wired up yet. Use it frozen (e.g. as a teacher or in
+        # decision fusion), or train with YOLO / RT-DETR which have real losses.
+        raise NotImplementedError(
+            "RF-DETR fine-tuning is not implemented in TianWen yet (no real loss). "
+            "Use RF-DETR frozen, or train with the YOLO / RT-DETR detectors, which "
+            "have real training losses."
         )
-        device = next(self.parameters()).device
-        return {
-            "loss_ce": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_bbox": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_giou": torch.tensor(0.0, device=device, requires_grad=True),
-        }
 
     def extract_features(
         self,

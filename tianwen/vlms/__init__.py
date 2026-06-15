@@ -5,12 +5,14 @@ from tianwen.vlms.base import BaseVLM, VLMOutput
 
 # Import concrete implementations to trigger registration
 def _register_vlms():
+    from tianwen.vlms import clip_vlm  # noqa: F401
     from tianwen.vlms import internvl  # noqa: F401
     from tianwen.vlms import qwen_vl  # noqa: F401
 
 
 _register_vlms()
 
+from tianwen.vlms.clip_vlm import CLIPVLM  # noqa: E402
 from tianwen.vlms.internvl import InternVLModel  # noqa: E402
 from tianwen.vlms.qwen_vl import QwenVLModel  # noqa: E402
 
@@ -19,4 +21,5 @@ __all__ = [
     "VLMOutput",
     "QwenVLModel",
     "InternVLModel",
+    "CLIPVLM",
 ]

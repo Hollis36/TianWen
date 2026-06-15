@@ -108,14 +108,31 @@ class VisualizationCallback(Callback):
         predictions: Any,
         targets: List[Dict[str, Tensor]],
     ) -> Tensor:
-        """Draw bounding boxes on images.
+        """Draw predicted boxes on images, returning an ``[N, C, H, W]`` tensor.
 
-        TODO: Implement actual visualization using OpenCV or PIL.
+        Uses the real visualization utility; falls back to the raw images if it
+        is unavailable (e.g. OpenCV missing) so logging never breaks training.
         """
-        logger.warning(
-            "_draw_predictions() is a placeholder; returning raw images without boxes drawn."
-        )
-        return images
+        try:
+            import numpy as np
+
+            from tianwen.utils.visualization import visualize_detections
+
+            vis = visualize_detections(
+                images,
+                predictions.outputs,
+                targets,
+                class_names=self.class_names or None,
+                max_images=images.shape[0],
+            )
+            if not vis:
+                return images
+            # list of [H, W, C] uint8 -> [N, C, H, W] float in [0, 1]
+            stacked = np.stack(vis).astype("float32") / 255.0
+            return torch.from_numpy(stacked).permute(0, 3, 1, 2)
+        except Exception as exc:  # pragma: no cover - visualization is best-effort
+            logger.warning("Visualization failed (%s); logging raw images.", exc)
+            return images
 
 
 class MetricsCallback(Callback):
@@ -141,8 +158,13 @@ class MetricsCallback(Callback):
         self.class_names = class_names or []
         self.iou_thresholds = iou_thresholds
 
-        self._predictions = []
-        self._targets = []
+        try:
+            from torchmetrics.detection import MeanAveragePrecision
+
+            self._metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
+        except Exception:  # pragma: no cover - torchmetrics optional at runtime
+            self._metric = None
+            logger.warning("torchmetrics not available; MetricsCallback will not compute mAP.")
 
     def on_validation_batch_end(
         self,
@@ -153,51 +175,48 @@ class MetricsCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        """Collect predictions for metric computation."""
-        # Store predictions and targets
-        if hasattr(outputs, "detection_output"):
-            self._predictions.extend(outputs.detection_output.outputs)
-            self._targets.extend(batch["targets"])
+        """Run the model on the batch and accumulate detections for mAP."""
+        if self._metric is None:
+            return
+
+        with torch.no_grad():
+            model_out = pl_module(batch["images"])
+        det_output = getattr(model_out, "detection_output", None)
+        if det_output is None:
+            return
+
+        preds = [
+            {
+                "boxes": o.boxes.detach().cpu(),
+                "scores": o.scores.detach().cpu(),
+                "labels": o.labels.detach().cpu(),
+            }
+            for o in det_output.outputs
+        ]
+        gts = [
+            {"boxes": t["boxes"].detach().cpu(), "labels": t["labels"].detach().cpu()}
+            for t in batch["targets"]
+        ]
+        self._metric.update(preds, gts)
 
     def on_validation_epoch_end(
         self,
         trainer: "pl.Trainer",
         pl_module: "pl.LightningModule",
     ) -> None:
-        """Compute and log metrics at epoch end."""
-        if not self._predictions:
+        """Compute and log real COCO-style mAP at epoch end."""
+        if self._metric is None:
+            return
+        try:
+            results = self._metric.compute()
+        except Exception:  # pragma: no cover - nothing accumulated
+            self._metric.reset()
             return
 
-        metrics = self._compute_metrics()
-
-        for name, value in metrics.items():
-            pl_module.log(f"val/{name}", value, prog_bar=True)
-
-        # Clear for next epoch
-        self._predictions.clear()
-        self._targets.clear()
-
-    def _compute_metrics(self) -> Dict[str, float]:
-        """Compute mAP and other metrics."""
-        metrics = {}
-
-        # Simplified mAP computation
-        # In practice, use pycocotools.COCOeval
-        for iou_thresh in self.iou_thresholds:
-            ap = self._compute_ap(iou_thresh)
-            metrics[f"mAP@{int(iou_thresh*100)}"] = ap
-
-        return metrics
-
-    def _compute_ap(self, iou_threshold: float) -> float:
-        """Compute Average Precision at given IoU threshold.
-
-        TODO: Implement actual AP computation using pycocotools.COCOeval.
-        """
-        logger.warning(
-            "_compute_ap() is a placeholder; returning 0.0. Implement with pycocotools for real metrics."
-        )
-        return 0.0
+        pl_module.log("val/mAP@50", results.get("map_50", torch.tensor(0.0)), prog_bar=True)
+        pl_module.log("val/mAP@75", results.get("map_75", torch.tensor(0.0)), prog_bar=True)
+        pl_module.log("val/mAP", results.get("map", torch.tensor(0.0)), prog_bar=True)
+        self._metric.reset()
 
 
 class ModelCheckpointCallback(Callback):

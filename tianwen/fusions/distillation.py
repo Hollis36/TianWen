@@ -142,11 +142,20 @@ class KnowledgeDistillation(BaseFusion):
         self.cos_loss = nn.CosineEmbeddingLoss()
 
     def _get_detector_feature_dim(self) -> int:
-        """Get the feature dimension from the detector dynamically."""
-        if hasattr(self.detector, "feature_dim"):
-            return self.detector.feature_dim
+        """Get the detector's real neck feature dimension dynamically."""
+        # Prefer the detector's inferred per-level channel count so the projector
+        # matches the actual feature map (the class-level ``feature_dim`` default
+        # is often wrong for a specific model variant).
+        get_channels = getattr(self.detector, "get_feature_channels", None)
+        if callable(get_channels):
+            try:
+                return get_channels("neck")
+            except Exception:
+                pass
         if hasattr(self.detector, "neck_out_channels"):
             return self.detector.neck_out_channels
+        if hasattr(self.detector, "feature_dim"):
+            return self.detector.feature_dim
         return 512  # final fallback
 
     def forward(
@@ -404,11 +413,17 @@ class MutualDistillation(BaseFusion):
         self.vlm_to_det_proj = FeatureProjector(vlm_dim, det_dim)
 
     def _get_det_dim(self) -> int:
-        """Dynamically determine detector feature dimension."""
-        if hasattr(self.detector, "feature_dim"):
-            return self.detector.feature_dim
+        """Dynamically determine the detector's real neck feature dimension."""
+        get_channels = getattr(self.detector, "get_feature_channels", None)
+        if callable(get_channels):
+            try:
+                return get_channels("neck")
+            except Exception:
+                pass
         if hasattr(self.detector, "neck_out_channels"):
             return self.detector.neck_out_channels
+        if hasattr(self.detector, "feature_dim"):
+            return self.detector.feature_dim
         return 512  # final fallback
 
     def forward(

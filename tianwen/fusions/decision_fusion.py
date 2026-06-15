@@ -306,23 +306,94 @@ class DecisionFusion(BaseFusion):
         targets: List[Dict[str, Tensor]],
     ) -> Tensor:
         """
-        Compute loss for training the score fusion module.
+        Train the score-fusion module to predict whether a detection is correct.
 
-        Uses ground truth to determine correct/incorrect detections.
+        For each detection we build a feature ``[detector_score, vlm_score]`` and
+        a binary label (1 if it matches a ground-truth box of the same class with
+        IoU above threshold, else 0), then train the scorer with binary
+        cross-entropy. The detector and VLM scores are detached, so only the
+        learnable scorer is updated by this loss.
         """
         device = images.device
-        total_loss = torch.tensor(0.0, device=device, requires_grad=True)
-
         if self.score_fusion is None:
-            return total_loss
+            return torch.zeros((), device=device, requires_grad=True)
 
-        # This is a simplified version
-        # Full implementation would:
-        # 1. Match predictions to ground truth
-        # 2. Get VLM verification scores
-        # 3. Train scorer to predict correct matches
+        feature_rows: List[Tensor] = []
+        labels: List[Tensor] = []
 
-        return total_loss
+        for image, det, target in zip(images, det_output.outputs, targets):
+            if len(det.boxes) == 0:
+                continue
+
+            num_verify = min(len(det.boxes), self.max_verifications)
+            order = torch.argsort(det.scores, descending=True)[:num_verify]
+            boxes = det.boxes[order]
+            scores = det.scores[order]
+            det_labels = det.labels[order]
+
+            vlm_scores = self._get_vlm_scores(image.unsqueeze(0), boxes, det_labels).to(device)
+
+            gt_boxes = target["boxes"].to(device)
+            gt_labels = target["labels"].to(device)
+            matched = self._match_to_ground_truth(boxes, det_labels, gt_boxes, gt_labels)
+
+            feature_rows.append(torch.stack([scores.to(device), vlm_scores], dim=1))
+            labels.append(matched.float())
+
+        if not feature_rows:
+            return torch.zeros((), device=device, requires_grad=True)
+
+        features = torch.cat(feature_rows, dim=0)  # [N, 2], detached inputs
+        target_labels = torch.cat(labels, dim=0)  # [N]
+        predictions = self.score_fusion(features).squeeze(-1)  # [N], requires grad
+        return F.binary_cross_entropy(predictions, target_labels)
+
+    def _match_to_ground_truth(
+        self,
+        boxes: Tensor,
+        labels: Tensor,
+        gt_boxes: Tensor,
+        gt_labels: Tensor,
+        iou_threshold: float = 0.5,
+    ) -> Tensor:
+        """Return a boolean tensor marking detections that match a GT box.
+
+        A detection matches when some ground-truth box shares its class and has
+        IoU above ``iou_threshold``.
+        """
+        num = boxes.shape[0]
+        if num == 0:
+            return torch.zeros(0, dtype=torch.bool, device=boxes.device)
+        if gt_boxes.numel() == 0:
+            return torch.zeros(num, dtype=torch.bool, device=boxes.device)
+
+        ious = self._pairwise_iou(boxes, gt_boxes)  # [num, num_gt]
+        same_class = labels[:, None] == gt_labels[None, :]  # [num, num_gt]
+        return ((ious > iou_threshold) & same_class).any(dim=1)
+
+    @staticmethod
+    def _pairwise_iou(boxes_a: Tensor, boxes_b: Tensor) -> Tensor:
+        """Vectorized IoU between two sets of xyxy boxes -> [len(a), len(b)]."""
+        area_a = (boxes_a[:, 2] - boxes_a[:, 0]).clamp(min=0) * (
+            boxes_a[:, 3] - boxes_a[:, 1]
+        ).clamp(min=0)
+        area_b = (boxes_b[:, 2] - boxes_b[:, 0]).clamp(min=0) * (
+            boxes_b[:, 3] - boxes_b[:, 1]
+        ).clamp(min=0)
+
+        lt = torch.max(boxes_a[:, None, :2], boxes_b[None, :, :2])
+        rb = torch.min(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
+        wh = (rb - lt).clamp(min=0)
+        inter = wh[..., 0] * wh[..., 1]
+        union = area_a[:, None] + area_b[None, :] - inter
+        return inter / union.clamp(min=1e-6)
+
+    def compute_loss(
+        self,
+        outputs: FusionOutput,
+        targets: List[Dict[str, Tensor]],
+    ) -> Dict[str, Tensor]:
+        return outputs.loss_dict or {}
 
     def compute_loss(
         self,

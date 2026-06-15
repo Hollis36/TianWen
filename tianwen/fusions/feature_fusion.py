@@ -212,7 +212,7 @@ class FeatureFusion(BaseFusion):
         use_gate: bool = True,
         freeze_vlm: bool = True,
         freeze_detector: bool = False,
-        det_feature_dim: int = 512,
+        det_feature_dim: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -227,7 +227,9 @@ class FeatureFusion(BaseFusion):
             use_gate: Whether to use gating mechanism
             freeze_vlm: Whether to freeze VLM
             freeze_detector: Whether to freeze detector
-            det_feature_dim: Detector feature dimension
+            det_feature_dim: Detector channel count at ``fusion_level``. If
+                ``None`` (default), it is inferred from the detector so the
+                fusion module always matches the real feature dimensions.
         """
         super().__init__(
             detector=detector,
@@ -240,32 +242,33 @@ class FeatureFusion(BaseFusion):
         self.fusion_type = fusion_type
 
         vlm_dim = vlm.vision_hidden_size
+        # Infer the real detector channel count at this level so the fusion
+        # module dimensions always line up with the injected feature map.
+        det_dim = det_feature_dim or detector.get_feature_channels(fusion_level)
+        self.det_feature_dim = det_dim
 
         # Create fusion module based on type
         if fusion_type == "cross_attention":
             self.fusion_module = CrossAttentionBlock(
-                det_dim=det_feature_dim,
+                det_dim=det_dim,
                 vlm_dim=vlm_dim,
                 num_heads=num_attention_heads,
             )
         elif fusion_type == "adapter":
             self.fusion_module = FeatureAdapter(
-                det_dim=det_feature_dim,
+                det_dim=det_dim,
                 vlm_dim=vlm_dim,
                 use_gate=use_gate,
             )
         elif fusion_type == "concat":
             # Concatenation with projection
             self.fusion_module = nn.Sequential(
-                nn.Linear(det_feature_dim + vlm_dim, det_feature_dim),
-                nn.LayerNorm(det_feature_dim),
+                nn.Linear(det_dim + vlm_dim, det_dim),
+                nn.LayerNorm(det_dim),
                 nn.GELU(),
             )
         else:
             raise ValueError(f"Unknown fusion type: {fusion_type}")
-
-        # Feature dimension adapter
-        self.det_proj = nn.Linear(det_feature_dim, det_feature_dim)
 
     def forward(
         self,
@@ -276,6 +279,11 @@ class FeatureFusion(BaseFusion):
         """
         Forward pass with feature fusion.
 
+        VLM features are injected into the detector's feature map at
+        ``fusion_level`` and propagated through the detection head, so the
+        fusion genuinely affects predictions and the fusion module is trained
+        through the detection loss.
+
         Args:
             images: Input images [B, C, H, W]
             targets: Optional detection targets
@@ -283,42 +291,38 @@ class FeatureFusion(BaseFusion):
         Returns:
             FusionOutput with detection results and losses
         """
-        # Extract detector features at specified level
-        det_features = self.detector.extract_features(images, feature_levels=[self.fusion_level])
+        if not self.detector.supports_feature_injection():
+            raise NotImplementedError(
+                f"{type(self.detector).__name__} does not support feature injection. "
+                "FeatureFusion needs a detector that implements feature injection "
+                "(e.g. YOLODetector)."
+            )
 
-        # Get VLM features
+        # Get VLM features (teacher / context provider).
         with torch.no_grad():
             vlm_features = self.vlm.get_visual_features(images)
 
-        # Apply fusion
-        fused_features = self._apply_fusion(det_features[self.fusion_level], vlm_features)
-
-        # Forward through detector with fused features
-        # Note: This requires the detector to support feature injection
-        # For simplicity, we do a full forward here
-        det_output = self.detector(images, targets)
-
-        # Compute losses
-        loss_dict = {}
-        if det_output.batch_loss_dict:
-            loss_dict.update(det_output.batch_loss_dict)
-
-        # Add fusion regularization loss (optional)
-        fusion_reg_loss = self._compute_fusion_regularization(
-            det_features[self.fusion_level], fused_features
+        # Inject the fused feature map at the chosen level and run the detector;
+        # the injected feature propagates through the head, so the detection loss
+        # (and therefore the fusion module's gradients) reflect the fusion.
+        self.detector.register_feature_injector(
+            self.fusion_level,
+            lambda feature: self._apply_fusion(feature, vlm_features),
         )
-        loss_dict["fusion_reg"] = fusion_reg_loss * 0.1
+        try:
+            det_output = self.detector(images, targets)
+        finally:
+            self.detector.clear_feature_injectors()
 
-        loss_dict["total_loss"] = sum(loss_dict.values())
+        loss_dict = {}
+        if getattr(det_output, "batch_loss_dict", None):
+            loss_dict.update(det_output.batch_loss_dict)
+            loss_dict["total_loss"] = sum(det_output.batch_loss_dict.values())
 
         return FusionOutput(
             detection_output=det_output,
-            fusion_features={
-                "det_features": det_features,
-                "vlm_features": vlm_features,
-                "fused_features": fused_features,
-            },
-            loss_dict=loss_dict,
+            fusion_features={"vlm_features": vlm_features},
+            loss_dict=loss_dict or None,
         )
 
     def _apply_fusion(
@@ -354,24 +358,6 @@ class FeatureFusion(BaseFusion):
 
         return fused
 
-    def _compute_fusion_regularization(
-        self,
-        original: Tensor,
-        fused: Tensor,
-    ) -> Tensor:
-        """
-        Compute regularization to prevent too much deviation.
-
-        This encourages the fused features to stay close to original
-        detector features while incorporating VLM information.
-        """
-        if original.dim() == 4:
-            B, C, H, W = original.shape
-            original = original.permute(0, 2, 3, 1).reshape(B, -1, C)
-            fused = fused.permute(0, 2, 3, 1).reshape(B, -1, C)
-
-        return F.mse_loss(fused, original)
-
     def compute_loss(
         self,
         outputs: FusionOutput,
@@ -394,7 +380,7 @@ class MultiScaleFeatureFusion(BaseFusion):
         detector: BaseDetector,
         vlm: BaseVLM,
         fusion_levels: List[str] = ["p3", "p4", "p5"],
-        det_feature_dims: List[int] = [256, 512, 1024],
+        det_feature_dims: Optional[List[int]] = None,
         freeze_vlm: bool = True,
         freeze_detector: bool = False,
         **kwargs,
@@ -408,6 +394,10 @@ class MultiScaleFeatureFusion(BaseFusion):
 
         self.fusion_levels = fusion_levels
         vlm_dim = vlm.vision_hidden_size
+
+        # Infer real per-level channel counts unless explicitly provided.
+        if det_feature_dims is None:
+            det_feature_dims = [detector.get_feature_channels(level) for level in fusion_levels]
 
         # Create fusion module for each level
         self.fusion_modules = nn.ModuleDict()
@@ -424,31 +414,39 @@ class MultiScaleFeatureFusion(BaseFusion):
         targets: Optional[List[Dict[str, Tensor]]] = None,
         **kwargs,
     ) -> FusionOutput:
-        """Multi-scale fusion forward pass."""
-        # Get all features
-        det_features = self.detector.extract_features(images, feature_levels=self.fusion_levels)
+        """Multi-scale fusion forward pass with real per-level injection."""
+        if not self.detector.supports_feature_injection():
+            raise NotImplementedError(
+                f"{type(self.detector).__name__} does not support feature injection. "
+                "MultiScaleFeatureFusion needs a detector that implements it "
+                "(e.g. YOLODetector)."
+            )
 
         with torch.no_grad():
             vlm_features = self.vlm.get_visual_features(images)
 
-        # Fuse at each level
-        fused_features = {}
+        # Inject a fused feature map at every level, then run the detector so the
+        # fused features propagate through the head and train the adapters.
         for level in self.fusion_levels:
-            if level in det_features:
-                fused_features[level] = self._apply_level_fusion(
-                    det_features[level], vlm_features, level
+            if level in self.fusion_modules:
+                self.detector.register_feature_injector(
+                    level,
+                    lambda feature, lvl=level: self._apply_level_fusion(feature, vlm_features, lvl),
                 )
+        try:
+            det_output = self.detector(images, targets)
+        finally:
+            self.detector.clear_feature_injectors()
 
-        # Get detection output
-        det_output = self.detector(images, targets)
-
-        loss_dict = det_output.batch_loss_dict or {}
-        loss_dict["total_loss"] = sum(loss_dict.values()) if loss_dict else torch.tensor(0.0)
+        loss_dict = {}
+        if getattr(det_output, "batch_loss_dict", None):
+            loss_dict.update(det_output.batch_loss_dict)
+            loss_dict["total_loss"] = sum(det_output.batch_loss_dict.values())
 
         return FusionOutput(
             detection_output=det_output,
-            fusion_features=fused_features,
-            loss_dict=loss_dict,
+            fusion_features={"vlm_features": vlm_features},
+            loss_dict=loss_dict or None,
         )
 
     def _apply_level_fusion(

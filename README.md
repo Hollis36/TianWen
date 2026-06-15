@@ -11,6 +11,7 @@
 [![License](https://img.shields.io/badge/license-Apache_2.0-green)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Hollis36/TianWen?style=social)](https://github.com/Hollis36/TianWen/stargazers)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Hollis36/TianWen/blob/main/notebooks/validate_tianwen.ipynb)
 
 [🌐 **Project page**](https://hollis36.github.io/tianwen-project-page/) · [⚡ Quickstart](#-quickstart) · [🧩 Examples](configs/experiment/) · [💬 Discussions](https://github.com/Hollis36/TianWen/discussions) · [🗺️ Roadmap](#%EF%B8%8F-roadmap)
 
@@ -27,7 +28,7 @@ Most VLM-enhanced detection projects glue Vision-Language Models and detectors t
 - 🎯 **Train-time intelligence, deploy-time speed** — Distill VLM knowledge into a fast detector during training; ship just the detector.
 - 🧪 **Three battle-tested strategies** — Knowledge distillation, feature fusion, and decision-level verification, covering the practical design space.
 
-> **Status: alpha.** Interfaces may shift. Benchmarks coming — see [Roadmap](#%EF%B8%8F-roadmap).
+> **Status: alpha.** Interfaces may shift. The training core is **real and tested**: YOLOv8/v11 and RT-DETR train through genuine `ultralytics` losses, feature fusion truly injects VLM features into the detector, and all strategies are exercised end-to-end (including a full PyTorch Lightning `Trainer` run) by the test suite — see [What works today](#-what-works-today). COCO benchmarks are still pending — see [Roadmap](#%EF%B8%8F-roadmap).
 
 ## ⚡ Quickstart
 
@@ -40,14 +41,35 @@ pip install -e .
 # 2. Train with a pre-defined recipe (YOLOv8-L + Qwen2-VL-7B + feature distillation)
 python tools/train.py experiment=yolov8_qwen_distill
 
-# 3. Run inference with the trained detector
-python tools/demo.py \
+# 3. Ship just the detector — export a VLM-free checkpoint
+python tools/export.py \
     --checkpoint runs/yolov8l_qwen2vl_distill/last.ckpt \
+    --output detector.pt
+
+# 4. Run inference with the distilled detector (no VLM needed)
+python tools/demo.py \
+    --checkpoint detector.pt \
     --image path/to/your-image.jpg \
     --output result.jpg
 ```
 
-That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and saves a regular detector checkpoint you can hand off to your existing inference stack.
+That's it. The recipe wires the detector + VLM + distillation, trains on COCO, and `tools/export.py` saves a standalone detector checkpoint (no VLM weights or dependencies) you can hand off to your existing inference stack.
+
+### Run it now — CPU, no data, no GPU VLM
+
+Smoke-run the **entire** pipeline (real YOLO + a real CLIP VLM + fusion) on synthetic data in seconds — no dataset and no large model required:
+
+```bash
+python tools/train.py \
+    dataset=dummy detector=yolov8 detector.model_name=yolov8n vlm=clip \
+    fusion=feature_fusion trainer.fast_dev_run=true trainer.accelerator=cpu
+```
+
+`dataset=dummy` generates random images/boxes on the fly and `vlm=clip` uses a lightweight, CPU-friendly CLIP teacher — so you can verify the framework end-to-end before touching real data or a 7B VLM.
+
+Prefer one click? Open [**`notebooks/validate_tianwen.ipynb`**](notebooks/validate_tianwen.ipynb) in [Colab](https://colab.research.google.com/github/Hollis36/TianWen/blob/main/notebooks/validate_tianwen.ipynb) or Kaggle — it runs the tests, trains the real stack, and exports a deployable detector.
+
+Want to validate on free online GPUs (Kaggle / Colab / Lightning AI) and get a first benchmark? See [docs/ONLINE_VALIDATION.md](docs/ONLINE_VALIDATION.md).
 
 ### Compose from the command line
 
@@ -66,10 +88,23 @@ Every detector / VLM / fusion / dataset is a Hydra config group — override any
 
 | Detectors | Vision-Language Models | Fusion strategies |
 |---|---|---|
-| YOLOv8 / v11 (`ultralytics`) | Qwen2-VL (2B / 7B / 72B) | **Knowledge Distillation** — VLM as teacher, detector as student (feature / logit / response) |
-| RT-DETR | InternVL3 | **Feature Fusion** — Inject VLM features at backbone / neck / head |
-| RF-DETR (`autodistill-rfdetr`) | | **Decision Fusion** — VLM verifies and rescores detector boxes (offline / batch only — see notes) |
-| Grounding-DINO | | |
+| YOLOv8 / v11 (`ultralytics`) — **trainable** ✅ | Qwen2-VL (2B / 7B / 72B) | **Knowledge Distillation** — VLM as teacher, detector as student (feature / logit / response) |
+| RT-DETR (`ultralytics`) — **trainable** ✅ | InternVL3 | **Feature Fusion** — inject VLM features at backbone / neck / head (really propagated through the head) |
+| RF-DETR (`autodistill-rfdetr`) — inference / frozen | | **Decision Fusion** — VLM verifies and rescores detector boxes (offline / batch only — see notes) |
+| Grounding-DINO — inference / frozen | | |
+
+> **Trainable** detectors have real `ultralytics` training losses and are verified to learn (single-batch overfit + full Lightning `Trainer` smoke tests). RF-DETR and Grounding-DINO are wired for **frozen / inference** use (teacher, open-vocabulary, decision fusion); their training paths raise a clear error rather than silently optimizing a zero loss.
+
+## ✅ What works today
+
+Verified by the test suite (`pytest tests/`):
+
+- **Real detection training** — YOLOv8/v11 and RT-DETR compute genuine `ultralytics` losses; gradients flow and a single fixed batch overfits.
+- **Real feature fusion** — VLM features are injected into the detector's feature map and propagated through the head, so the fusion module is trained through the detection loss (not a no-op).
+- **Real distillation** — feature/logit distillation aligns detector and VLM representations with dimensions inferred from the actual detector.
+- **Real decision fusion** — the score-fusion module is trained to predict detection correctness from `[detector_score, vlm_score]` via ground-truth matching.
+- **Real evaluation** — COCO-style mAP via `torchmetrics` (no placeholder zeros).
+- **End-to-end** — a full PyTorch Lightning `Trainer` run (build → train step → val step → mAP) passes in CI.
 
 Adding a new detector or VLM is one decorator:
 

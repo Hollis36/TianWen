@@ -7,7 +7,7 @@ the required abstract methods.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -108,11 +108,52 @@ class BaseDetector(ABC, nn.Module):
         self.input_size = input_size
         self.pretrained = pretrained
         self._backbone_frozen = False
+        # level name -> callable(feature) -> feature, applied during forward.
+        self._feature_injectors: Dict[str, Callable[[Tensor], Tensor]] = {}
 
     @property
     def backbone_frozen(self) -> bool:
         """Return whether the backbone is frozen."""
         return self._backbone_frozen
+
+    # ------------------------------------------------------------------
+    # Feature injection (used by feature-fusion strategies)
+    # ------------------------------------------------------------------
+    def supports_feature_injection(self) -> bool:
+        """Whether this detector can inject features mid-forward.
+
+        Feature-fusion strategies require the detector to apply an externally
+        supplied transform to an intermediate feature map *and propagate the
+        result through the detection head*. Subclasses that wire this up
+        (e.g. via forward hooks) should override this to return ``True``.
+        """
+        return False
+
+    def register_feature_injector(self, level: str, fn: Callable[[Tensor], Tensor]) -> None:
+        """Register a transform applied to ``level``'s feature map during forward.
+
+        Args:
+            level: Feature level name (e.g. ``"neck"``) to inject into.
+            fn: Callable mapping the feature tensor to a same-shaped tensor.
+        """
+        self._feature_injectors[level] = fn
+
+    def clear_feature_injectors(self) -> None:
+        """Remove all registered feature injectors."""
+        self._feature_injectors = {}
+
+    def _apply_feature_injector(self, level: str, feature: Tensor) -> Tensor:
+        """Apply a registered injector for ``level`` (no-op if none registered)."""
+        fn = self._feature_injectors.get(level)
+        return fn(feature) if fn is not None else feature
+
+    def get_feature_channels(self, level: str) -> int:
+        """Return the channel count of a feature level.
+
+        Defaults to :attr:`feature_dim`; detectors with level-dependent channel
+        counts (e.g. an FPN) should override this.
+        """
+        return self.feature_dim
 
     @abstractmethod
     def forward(

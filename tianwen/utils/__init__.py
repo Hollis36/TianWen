@@ -17,6 +17,11 @@ from tianwen.utils.experiment import (
     compute_config_hash,
     ensure_reproducibility,
 )
+from tianwen.utils.export import (
+    export_detector_checkpoint,
+    export_detector_from_training_checkpoint,
+    load_detector_checkpoint,
+)
 from tianwen.utils.hyperparameter import (
     HyperparameterSearch,
     SearchSpace,
@@ -33,6 +38,10 @@ __all__ = [
     # Metrics
     "compute_iou",
     "compute_map",
+    # Detector export (ship just the detector)
+    "export_detector_checkpoint",
+    "export_detector_from_training_checkpoint",
+    "load_detector_checkpoint",
     # Experiment management
     "ExperimentManager",
     "ExperimentResult",

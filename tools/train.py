@@ -173,8 +173,16 @@ def main(cfg: DictConfig) -> None:
     exp_logger = build_logger(cfg)
     callbacks = build_callbacks(cfg)
 
+    trainer_kwargs = OmegaConf.to_container(cfg.trainer, resolve=True)
+    # Mixed precision is GPU-only; fall back to 32-bit on CPU so smoke runs work.
+    if str(trainer_kwargs.get("accelerator", "auto")) == "cpu" and "16" in str(
+        trainer_kwargs.get("precision", "")
+    ):
+        logger.info("CPU accelerator: forcing precision=32 (mixed precision is GPU-only).")
+        trainer_kwargs["precision"] = 32
+
     trainer = pl.Trainer(
-        **OmegaConf.to_container(cfg.trainer, resolve=True),
+        **trainer_kwargs,
         logger=exp_logger,
         callbacks=callbacks,
     )
@@ -183,8 +191,8 @@ def main(cfg: DictConfig) -> None:
     logger.info("Starting training...")
     trainer.fit(model, datamodule=datamodule)
 
-    # Test
-    if cfg.get("run_test", True):
+    # Test — skip under fast_dev_run (no checkpoint is saved, so ckpt_path="best" would fail).
+    if cfg.get("run_test", True) and not trainer_kwargs.get("fast_dev_run", False):
         logger.info("Running test...")
         trainer.test(model, datamodule=datamodule, ckpt_path="best")
 

@@ -279,24 +279,17 @@ class GroundingDINODetector(BaseDetector):
         targets: List[Dict[str, Tensor]],
         text_prompt: str,
     ) -> BatchDetectionOutput:
-        """Training forward pass."""
-        # Grounding-DINO training typically requires special handling
-        # as it's designed for zero-shot/open-vocabulary scenarios
+        """Training forward pass.
 
-        # Get predictions for loss computation
-        outputs = self._forward_inference(images, text_prompt)
-
-        # Placeholder loss
-        device = images.device
-        loss_dict = {
-            "loss_ce": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_bbox": torch.tensor(0.0, device=device, requires_grad=True),
-            "loss_giou": torch.tensor(0.0, device=device, requires_grad=True),
-        }
-
-        return BatchDetectionOutput(
-            outputs=outputs.outputs,
-            batch_loss_dict=loss_dict,
+        Grounding-DINO is an open-vocabulary detector intended to be used frozen
+        (zero-shot inference, or as a teacher / verifier in decision fusion).
+        Fine-tuning it is not implemented, so we fail loudly rather than silently
+        "train" on a zero loss.
+        """
+        raise NotImplementedError(
+            "Grounding-DINO fine-tuning is not implemented in TianWen (no real "
+            "loss). Use it frozen for open-vocabulary inference or decision "
+            "fusion, or train with the YOLO / RT-DETR detectors."
         )
 
     def _forward_inference(
