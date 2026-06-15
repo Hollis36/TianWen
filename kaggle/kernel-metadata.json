@@ -1,0 +1,13 @@
+{
+  "id": "__USERNAME__/tianwen-ablation",
+  "title": "tianwen-ablation",
+  "code_file": "run.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": ["__DATASET_SLUG__"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
