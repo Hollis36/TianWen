@@ -31,8 +31,11 @@ cmd_push() {
   : "${DATASET_SLUG:?set DATASET_SLUG, e.g. awsaf49/coco-2017-dataset}"
   write_creds
   local steps="${MAX_STEPS:-2000}"
+  local limit_val="${LIMIT_VAL:-None}"
   mkdir -p "$WORK"
-  sed "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
+  sed -e "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" \
+      -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
+      "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
   sed -e "s#__USERNAME__#${KAGGLE_USERNAME}#" -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
       "$REPO_DIR/kaggle/kernel-metadata.json" > "$WORK/kernel-metadata.json"
   echo "${KAGGLE_USERNAME}/tianwen-ablation" > "$SLUG_FILE"

@@ -15,6 +15,7 @@ import sys
 
 # Tunables (scripts/run_on_kaggle.sh can sed-replace these before pushing).
 MAX_STEPS = 2000  # training steps per arm (baseline and distilled)
+LIMIT_VAL_BATCHES = None  # cap test batches for a quick number (None = full val)
 IMAGE_SIZE = 640
 BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
@@ -76,7 +77,7 @@ result = run_distillation_ablation(
     datamodule=datamodule,
     distill_mode="feature",
     max_steps=MAX_STEPS,
-    limit_val_batches=None,
+    limit_val_batches=LIMIT_VAL_BATCHES,
     accelerator="auto",
     precision="16-mixed",
 )
