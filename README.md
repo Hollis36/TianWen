@@ -11,6 +11,7 @@
 [![License](https://img.shields.io/badge/license-Apache_2.0-green)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Hollis36/TianWen?style=social)](https://github.com/Hollis36/TianWen/stargazers)
 [![Status](https://img.shields.io/badge/status-alpha-orange)]()
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Hollis36/TianWen/blob/main/notebooks/validate_tianwen.ipynb)
 
 [🌐 **Project page**](https://hollis36.github.io/tianwen-project-page/) · [⚡ Quickstart](#-quickstart) · [🧩 Examples](configs/experiment/) · [💬 Discussions](https://github.com/Hollis36/TianWen/discussions) · [🗺️ Roadmap](#%EF%B8%8F-roadmap)
 
@@ -65,6 +66,8 @@ python tools/train.py \
 ```
 
 `dataset=dummy` generates random images/boxes on the fly and `vlm=clip` uses a lightweight, CPU-friendly CLIP teacher — so you can verify the framework end-to-end before touching real data or a 7B VLM.
+
+Prefer one click? Open [**`notebooks/validate_tianwen.ipynb`**](notebooks/validate_tianwen.ipynb) in [Colab](https://colab.research.google.com/github/Hollis36/TianWen/blob/main/notebooks/validate_tianwen.ipynb) or Kaggle — it runs the tests, trains the real stack, and exports a deployable detector.
 
 Want to validate on free online GPUs (Kaggle / Colab / Lightning AI) and get a first benchmark? See [docs/ONLINE_VALIDATION.md](docs/ONLINE_VALIDATION.md).
 
