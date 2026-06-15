@@ -40,7 +40,9 @@ subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e",
 subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
      "ultralytics", "pytorch-lightning", "torchmetrics", "omegaconf", "hydra-core",
-     "transformers", "pycocotools"],
+     # Newer transformers block torch.load unless torch>=2.6 (CVE-2025-32434);
+     # pin a version before that restriction so CLIP loads on torch 2.5.1 (P100).
+     "transformers==4.46.0", "pycocotools"],
     check=True,
 )
 sys.path.insert(0, "TianWen")
