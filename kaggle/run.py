@@ -10,6 +10,7 @@ TianWen, auto-detects the attached dataset (COCO, else the first YOLO
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -33,6 +34,32 @@ from tianwen.datasets import build_datamodule, discover_coco  # noqa: E402
 from tianwen.utils.ablation import run_distillation_ablation  # noqa: E402
 
 # --- Detect the attached dataset -----------------------------------------
+def _find_yolo_image_dirs():
+    """Find YOLO-layout image split dirs (``**/images/<split>``)."""
+    dirs = set()
+    for p in glob.glob("/kaggle/input/**/images/*/*", recursive=True):
+        if p.lower().endswith((".jpg", ".jpeg", ".png", ".bmp")):
+            dirs.add(os.path.dirname(p))
+    train = next((d for d in sorted(dirs) if re.search(r"images/[^/]*train", d)), None)
+    val = next((d for d in sorted(dirs) if re.search(r"images/[^/]*(val|test)", d)), None)
+    if train is None and val is None and dirs:
+        train = sorted(dirs)[0]
+    return train or val, val or train
+
+
+def _infer_num_classes(image_dirs):
+    max_cls = -1
+    for image_dir in image_dirs:
+        label_dir = image_dir.replace("/images/", "/labels/")
+        for txt in glob.glob(os.path.join(label_dir, "*.txt")):
+            with open(txt) as f:
+                for line in f:
+                    parts = line.split()
+                    if parts:
+                        max_cls = max(max_cls, int(float(parts[0])))
+    return max_cls + 1 if max_cls >= 0 else 0
+
+
 coco = discover_coco()
 if coco:
     print("Dataset: COCO at", coco["root"], flush=True)
@@ -49,21 +76,43 @@ if coco:
     num_classes = 80
 else:
     yamls = sorted(glob.glob("/kaggle/input/**/data.yaml", recursive=True))
-    if not yamls:
-        raise SystemExit("No COCO and no YOLO data.yaml found under /kaggle/input.")
-    data_yaml = yamls[0]
-    print("Dataset: YOLO data.yaml at", data_yaml, flush=True)
-    dataset_name = os.path.basename(os.path.dirname(data_yaml)) or "yolo"
-    datamodule = build_datamodule(
-        {
-            "name": "yolo",
-            "data_yaml": data_yaml,
-            "image_size": [IMAGE_SIZE, IMAGE_SIZE],
-            "batch_size": BATCH_SIZE,
-            "num_workers": 2,
-        }
-    )
-    num_classes = datamodule.num_classes
+    if yamls:
+        data_yaml = yamls[0]
+        print("Dataset: YOLO data.yaml at", data_yaml, flush=True)
+        dataset_name = os.path.basename(os.path.dirname(data_yaml)) or "yolo"
+        datamodule = build_datamodule(
+            {
+                "name": "yolo",
+                "data_yaml": data_yaml,
+                "image_size": [IMAGE_SIZE, IMAGE_SIZE],
+                "batch_size": BATCH_SIZE,
+                "num_workers": 2,
+            }
+        )
+        num_classes = datamodule.num_classes
+    else:
+        # Bare YOLO layout (images/ + labels/, no data.yaml): infer dirs + classes.
+        train_images, val_images = _find_yolo_image_dirs()
+        if not val_images:
+            raise SystemExit("No COCO, no data.yaml, and no YOLO images/ layout under /kaggle/input.")
+        num_classes = _infer_num_classes({train_images, val_images})
+        print(
+            f"Dataset: YOLO layout (train={train_images}, val={val_images}, "
+            f"num_classes={num_classes})",
+            flush=True,
+        )
+        dataset_name = os.path.basename(os.path.dirname(os.path.dirname(val_images))) or "yolo"
+        datamodule = build_datamodule(
+            {
+                "name": "yolo",
+                "train_images": train_images,
+                "val_images": val_images,
+                "class_names": [str(i) for i in range(num_classes)],
+                "image_size": [IMAGE_SIZE, IMAGE_SIZE],
+                "batch_size": BATCH_SIZE,
+                "num_workers": 2,
+            }
+        )
 
 # --- Run the ablation -----------------------------------------------------
 result = run_distillation_ablation(
