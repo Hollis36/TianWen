@@ -1,0 +1,24 @@
+# Generic YOLO-format dataset (Ultralytics / Roboflow layout)
+#
+# For any custom detection dataset — e.g. industrial defect benchmarks
+# (NEU-DET, GC10-DET, PCB-defect) exported in YOLO format.
+#
+# Easiest: point at an Ultralytics data.yaml (it lists train/val dirs + names):
+#   python tools/ablation.py dataset=yolo dataset.data_yaml=/path/to/data.yaml \
+#       detector=yolov8 detector.num_classes=6 vlm=clip
+#
+# Remember to set detector.num_classes to match this dataset's class count.
+
+name: yolo
+
+# Option A — an Ultralytics data.yaml (recommended)
+data_yaml: null
+
+# Option B — explicit image dirs (labels are read from the parallel 'labels/' dir)
+train_images: null
+val_images: null
+class_names: []
+
+image_size: [640, 640]
+batch_size: ${train.batch_size}
+num_workers: 0
