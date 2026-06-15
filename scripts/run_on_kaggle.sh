@@ -20,6 +20,15 @@ WORK="${TIANWEN_KAGGLE_WORK:-/tmp/tianwen-kaggle}"
 SLUG_FILE="$WORK/slug.txt"
 
 write_creds() {
+  # Prefer an existing ~/.kaggle/kaggle.json (so the key never needs to be on the
+  # command line); otherwise build it from KAGGLE_USERNAME / KAGGLE_KEY.
+  if [ -f "$HOME/.kaggle/kaggle.json" ]; then
+    if [ -z "${KAGGLE_USERNAME:-}" ]; then
+      KAGGLE_USERNAME="$(python3 -c "import json;print(json.load(open('$HOME/.kaggle/kaggle.json'))['username'])")"
+      export KAGGLE_USERNAME
+    fi
+    return
+  fi
   : "${KAGGLE_USERNAME:?set KAGGLE_USERNAME}"
   : "${KAGGLE_KEY:?set KAGGLE_KEY}"
   mkdir -p "$HOME/.kaggle"
