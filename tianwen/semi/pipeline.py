@@ -108,6 +108,21 @@ def run_ssl_arm(
         pseudo_dir = os.path.join(work_dir, "pseudo")
         out.update(write_pseudo_dataset(splits, preds, conf, pseudo_dir))
         data_yaml = os.path.join(pseudo_dir, "data.yaml")
+        # Labeller's own test accuracy with the same evaluator as the
+        # pseudo-label scores, so every labeller (incl. RF-DETR) is comparable.
+        test_dir = os.path.join(splits.root, "test")
+        test_images = sorted(
+            os.path.join(test_dir, "images", f)
+            for f in os.listdir(os.path.join(test_dir, "images"))
+        )
+        test_q = pseudo_label_quality(
+            test_images,
+            labeller.predict(test_images, conf=0.05),
+            os.path.join(test_dir, "labels"),
+            conf,
+        )
+        out["labeller_test_eval_mAP50"] = test_q["pseudo_mAP50"]
+        out["labeller_test_eval_mAP50_95"] = test_q["pseudo_mAP50_95"]
         if isinstance(labeller, UltralyticsLabeller):
             # Report the labeller's own test mAP for reference.
             m = labeller.model.val(
