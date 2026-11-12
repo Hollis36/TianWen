@@ -125,6 +125,19 @@ class KnowledgeDistillation(BaseFusion):
                 hidden_dim=projector_hidden_dim,
             )
 
+        elif distill_mode == "dense":
+            # Region-level distillation: a 1x1-conv projector keeps the spatial
+            # layout so every location of the detector map is aligned with the
+            # VLM patch token covering the same image region.
+            det_feature_dim = self._get_detector_feature_dim()
+            vlm_feature_dim = vlm.vision_hidden_size
+            hidden = projector_hidden_dim or vlm_feature_dim
+            self.dense_projector = nn.Sequential(
+                nn.Conv2d(det_feature_dim, hidden, kernel_size=1),
+                nn.GELU(),
+                nn.Conv2d(hidden, vlm_feature_dim, kernel_size=1),
+            )
+
         elif distill_mode == "logit":
             # VLM classification head: VLM features -> class logits
             self.vlm_classifier = nn.Linear(vlm.vision_hidden_size, detector.num_classes)
@@ -177,12 +190,12 @@ class KnowledgeDistillation(BaseFusion):
         batch_size = images.shape[0]
         device = images.device
 
-        # 1. Get detector predictions and features
-        det_output = self.detector(images, targets)
-
-        # Extract detector features for distillation
-        if self.distill_mode == "feature":
-            det_features = self.detector.extract_features(images, feature_levels=["neck"])
+        # 1. Get detector predictions and (gradient-carrying) neck features.
+        neck = None
+        if self.distill_mode in ("feature", "dense", "response"):
+            det_output, neck = self._detector_forward_with_features(images, targets, "neck")
+        else:
+            det_output = self.detector(images, targets)
 
         # 2. Get VLM features (teacher)
         with torch.no_grad():
@@ -198,7 +211,11 @@ class KnowledgeDistillation(BaseFusion):
 
         # Distillation loss
         if self.distill_mode == "feature":
-            distill_loss = self._compute_feature_distill_loss(det_features, vlm_features)
+            distill_loss = self._compute_feature_distill_loss({"neck": neck}, vlm_features)
+            loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
+
+        elif self.distill_mode == "dense":
+            distill_loss = self._compute_dense_distill_loss(neck, vlm_features)
             loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         elif self.distill_mode == "logit":
@@ -208,7 +225,9 @@ class KnowledgeDistillation(BaseFusion):
         elif self.distill_mode == "response":
             # Response-based distillation requires text generation
             if targets is not None:
-                distill_loss = self._compute_response_distill_loss(images, det_output, targets)
+                distill_loss = self._compute_response_distill_loss(
+                    images, det_output, targets, det_feat=neck
+                )
                 loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         # Compute total loss
@@ -220,6 +239,55 @@ class KnowledgeDistillation(BaseFusion):
             fusion_features={"vlm_features": vlm_features},
             loss_dict=loss_dict,
         )
+
+    @staticmethod
+    def _vlm_tokens_to_grid(vlm_features: Tensor) -> Optional[Tensor]:
+        """Reshape VLM patch tokens ``[B, N, D]`` into a map ``[B, D, g, g]``.
+
+        Drops a leading CLS token when ``N - 1`` is a perfect square (ViT/CLIP).
+        Returns ``None`` if the tokens don't form a square patch grid.
+        """
+        if vlm_features.dim() == 4:
+            return vlm_features
+        if vlm_features.dim() != 3:
+            return None
+        batch, num_tokens, dim = vlm_features.shape
+        for tokens in (vlm_features, vlm_features[:, 1:]):
+            n = tokens.shape[1]
+            side = int(round(n**0.5))
+            if n > 0 and side * side == n:
+                return tokens.transpose(1, 2).reshape(batch, dim, side, side)
+        return None
+
+    def _compute_dense_distill_loss(
+        self,
+        det_feat: Tensor,
+        vlm_features: Tensor,
+    ) -> Tensor:
+        """Region-level distillation: align detector features with VLM patches.
+
+        The detector neck map ``[B, C, H, W]`` is projected to the VLM width with a
+        1x1 conv, average-pooled onto the VLM patch grid ``g x g`` (both cover the
+        same full image), and matched per location with ``1 - cosine``. Unlike the
+        pooled ``feature`` mode, this keeps *where* semantics occur, which matters
+        for small, localized objects such as defects.
+        """
+        teacher = self._vlm_tokens_to_grid(vlm_features)
+        if teacher is None:
+            raise ValueError(
+                "Dense distillation needs VLM patch tokens forming a square grid; got "
+                f"shape {tuple(vlm_features.shape)}. Use distill_mode='feature' instead."
+            )
+        if det_feat.dim() != 4:
+            raise ValueError(
+                f"Dense distillation needs a [B, C, H, W] map, got {tuple(det_feat.shape)}"
+            )
+
+        student = self.dense_projector(det_feat)
+        student = F.adaptive_avg_pool2d(student, teacher.shape[-2:])
+        teacher = teacher.to(dtype=student.dtype, device=student.device)
+        cosine = F.cosine_similarity(student, teacher, dim=1)  # [B, g, g]
+        return (1.0 - cosine).mean()
 
     def _compute_feature_distill_loss(
         self,
@@ -319,6 +387,7 @@ class KnowledgeDistillation(BaseFusion):
         images: Tensor,
         det_output: BatchDetectionOutput,
         targets: List[Dict[str, Tensor]],
+        det_feat: Optional[Tensor] = None,
     ) -> Tensor:
         """
         Compute response-based distillation loss.
@@ -343,12 +412,11 @@ class KnowledgeDistillation(BaseFusion):
         else:
             vlm_pooled = vlm_feats
 
-        # Student: detector neck features pooled to a global descriptor
-        det_feats = self.detector.extract_features(images, feature_levels=["neck"])
-        if "neck" in det_feats:
-            det_feat = det_feats["neck"]
-        else:
-            det_feat = list(det_feats.values())[0]
+        # Student: detector neck features pooled to a global descriptor. Prefer the
+        # gradient-carrying map captured during the detector forward.
+        if det_feat is None:
+            det_feats = self.detector.extract_features(images, feature_levels=["neck"])
+            det_feat = det_feats.get("neck", next(iter(det_feats.values())))
 
         if det_feat.dim() == 4:
             B, C, H, W = det_feat.shape
@@ -434,8 +502,8 @@ class MutualDistillation(BaseFusion):
     ) -> FusionOutput:
         """Bidirectional distillation forward pass."""
         # Get features from both models
-        det_output = self.detector(images, targets)
-        det_features = self.detector.extract_features(images)
+        # Capture neck features inside the detector forward so they carry gradients.
+        det_output, det_features = self._detector_forward_with_features(images, targets, "neck")
 
         vlm_output = self.vlm(images)
         vlm_features = vlm_output.visual_features

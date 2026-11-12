@@ -10,5 +10,6 @@
   "detector": "yolov8n",
   "vlm": "openai/clip-vit-base-patch32",
   "max_steps": 2000,
-  "note": "Kaggle P100, torch 2.5.1/cu121, transformers 4.46.0, seed 0, full validation split, feature distillation (weight 1.0). Single seed."
+  "note": "INVALID as a VLM-effect measurement: distillation used no_grad neck features, so the distillation loss never updated the detector (only the projector). The delta is run-to-run variation. Kaggle P100, torch 2.5.1/cu121, transformers 4.46.0, seed 0, full val split.",
+  "valid": false
 }
