@@ -22,6 +22,8 @@ BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
 DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
+DISTILL_WEIGHT = 1.0  # distillation loss weight of the distilled arm
+TRAIN_FRACTION = 1.0  # <1.0 = fixed random subset of the train split (low-data regime)
 SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 
 # --- Set up TianWen -------------------------------------------------------
@@ -114,6 +116,7 @@ if coco:
             "image_size": [IMAGE_SIZE, IMAGE_SIZE],
             "batch_size": BATCH_SIZE,
             "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
         }
     )
     num_classes = 80
@@ -130,6 +133,7 @@ else:
                 "image_size": [IMAGE_SIZE, IMAGE_SIZE],
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
             }
         )
         num_classes = datamodule.num_classes
@@ -154,6 +158,7 @@ else:
                 "image_size": [IMAGE_SIZE, IMAGE_SIZE],
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
             }
         )
 
@@ -173,6 +178,7 @@ result = run_distillation_ablation(
     accelerator="auto",
     precision="16-mixed",
     seed=SEED,
+    distill_weight=DISTILL_WEIGHT,
 )
 
 result.update(
@@ -184,6 +190,8 @@ result.update(
         "max_steps": MAX_STEPS,
         "distill_mode": DISTILL_MODE,
         "seed": SEED,
+        "distill_weight": DISTILL_WEIGHT,
+        "train_fraction": TRAIN_FRACTION,
         "torch": torch.__version__,
         "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }

@@ -23,11 +23,12 @@ def run_distillation_ablation(
     accelerator: str = "auto",
     precision: str = "32",
     seed: int = 0,
+    distill_weight: float = 1.0,
 ) -> Dict[str, float]:
     """Compare a detector-only baseline against the same detector VLM-distilled.
 
     The only difference between the two runs is the distillation loss weight
-    (0 = baseline, 1 = distilled); detector, data, seed, and step count are
+    (0 = baseline, ``distill_weight`` = distilled); detector, data, seed, and step count are
     identical, so the mAP delta isolates the VLM teacher's effect.
 
     Args:
@@ -40,6 +41,7 @@ def run_distillation_ablation(
         accelerator: Lightning accelerator ("auto", "gpu", "cpu").
         precision: Lightning precision ("32", "16-mixed", ...).
         seed: Seed applied before each run for a controlled comparison.
+        distill_weight: Distillation loss weight of the distilled arm.
 
     Returns:
         Dict with ``baseline_mAP50``, ``baseline_mAP50_95``, ``distilled_mAP50``,
@@ -49,7 +51,7 @@ def run_distillation_ablation(
 
     from tianwen.engine.lightning_module import DetectorVLMModule
 
-    runs = {"baseline": 0.0, "distilled": 1.0}
+    runs = {"baseline": 0.0, "distilled": float(distill_weight)}
     scores: Dict[str, Dict[str, float]] = {}
 
     for name, feature_loss_weight in runs.items():

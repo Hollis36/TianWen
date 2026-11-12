@@ -72,3 +72,29 @@ def test_data_yaml_parsing_and_build(tmp_path):
 def test_requires_val_split(tmp_path):
     with pytest.raises(ValueError):
         YOLOFormatDataModule(train_images=str(tmp_path), class_names=["a"])
+
+
+def test_train_fraction_takes_fixed_subset(tmp_path):
+    _make_yolo_dataset(tmp_path)
+    kw = dict(
+        train_images=str(tmp_path / "images" / "train"),
+        val_images=str(tmp_path / "images" / "val"),
+        class_names=list("abc"),
+        image_size=(64, 64),
+        batch_size=1,
+    )
+    a = YOLOFormatDataModule(train_fraction=0.34, **kw)
+    b = YOLOFormatDataModule(train_fraction=0.34, **kw)
+    assert len(a.train_dataset) == 1
+    # Same subset_seed -> same images, independent of any training seed.
+    assert a.train_dataset.indices == b.train_dataset.indices
+    assert len(a.val_dataset) == 3  # validation is never subsampled
+    next(iter(a.train_dataloader()))  # the Subset still collates
+
+
+def test_train_fraction_validated(tmp_path):
+    _make_yolo_dataset(tmp_path)
+    with pytest.raises(ValueError):
+        YOLOFormatDataModule(
+            val_images=str(tmp_path / "images" / "val"), class_names=["a"], train_fraction=0.0
+        )
