@@ -8,6 +8,7 @@
 # Optional:
 #   MAX_STEPS                     - training steps per arm (default 2000)
 #   DISTILL_MODE                  - dense (default) | feature | logit | response
+#   ACCELERATOR                   - Kaggle accelerator (default NvidiaTeslaT4)
 #   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
 #                                   names to run several arms in parallel
 #
@@ -57,7 +58,7 @@ cmd_push() {
       "$REPO_DIR/kaggle/kernel-metadata.json" > "$WORK/kernel-metadata.json"
   echo "${KAGGLE_USERNAME}/${KERNEL_NAME}" > "$SLUG_FILE"
   echo "Pushing kernel ${KAGGLE_USERNAME}/${KERNEL_NAME} (dataset=${DATASET_SLUG}, steps=${steps})..."
-  kaggle kernels push -p "$WORK"
+  kaggle kernels push -p "$WORK" --accelerator "${ACCELERATOR:-NvidiaTeslaT4}"
   echo "Pushed. Poll with: ./scripts/run_on_kaggle.sh poll"
 }
 
