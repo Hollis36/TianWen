@@ -124,8 +124,6 @@ if coco:
             "batch_size": BATCH_SIZE,
             "num_workers": 2,
                 "train_fraction": TRAIN_FRACTION,
-        "n_train_images": N_TRAIN,
-        "n_val_images": N_VAL,
         }
     )
     num_classes = 80
@@ -207,6 +205,8 @@ result.update(
         "tianwen_commit": TIANWEN_COMMIT,
         "distill_weight": DISTILL_WEIGHT,
         "train_fraction": TRAIN_FRACTION,
+        "n_train_images": N_TRAIN,
+        "n_val_images": N_VAL,
         "torch": torch.__version__,
         "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }
