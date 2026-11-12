@@ -20,6 +20,7 @@ LIMIT_VAL_BATCHES = None  # cap test batches for a quick number (None = full val
 IMAGE_SIZE = 640
 BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
+DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
 
 # --- Set up TianWen -------------------------------------------------------
@@ -153,7 +154,7 @@ result = run_distillation_ablation(
     },
     vlm_cfg={"type": "clip", "model_name": VLM_MODEL},
     datamodule=datamodule,
-    distill_mode="feature",
+    distill_mode=DISTILL_MODE,
     max_steps=MAX_STEPS,
     limit_val_batches=LIMIT_VAL_BATCHES,
     accelerator="auto",
@@ -167,6 +168,7 @@ result.update(
         "detector": DETECTOR,
         "vlm": VLM_MODEL,
         "max_steps": MAX_STEPS,
+        "distill_mode": DISTILL_MODE,
     }
 )
 print("ABLATION_RESULT_JSON " + json.dumps(result), flush=True)

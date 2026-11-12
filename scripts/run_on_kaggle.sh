@@ -7,6 +7,7 @@
 #   DATASET_SLUG                  - Kaggle dataset to attach, e.g. awsaf49/coco-2017-dataset
 # Optional:
 #   MAX_STEPS                     - training steps per arm (default 2000)
+#   DISTILL_MODE                  - dense (default) | feature | logit | response
 #
 # Usage:
 #   KAGGLE_USERNAME=... KAGGLE_KEY=... DATASET_SLUG=owner/name ./scripts/run_on_kaggle.sh push
@@ -41,9 +42,11 @@ cmd_push() {
   write_creds
   local steps="${MAX_STEPS:-2000}"
   local limit_val="${LIMIT_VAL:-None}"
+  local mode="${DISTILL_MODE:-dense}"
   mkdir -p "$WORK"
   sed -e "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" \
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
+      -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
       "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
   sed -e "s#__USERNAME__#${KAGGLE_USERNAME}#" -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
       "$REPO_DIR/kaggle/kernel-metadata.json" > "$WORK/kernel-metadata.json"
@@ -68,7 +71,7 @@ cmd_poll() {
       # Persist into the repo so results survive ephemeral containers.
       mkdir -p "$REPO_DIR/results"
       local name
-      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('max_steps','x')}steps\")")"
+      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('distill_mode','feature')}_{d.get('max_steps','x')}steps\")")"
       cp "$WORK/out/ablation_result.json" "$REPO_DIR/results/${name}.json"
       echo "Saved to results/${name}.json (commit it to keep it)."
     else

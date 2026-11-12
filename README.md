@@ -130,7 +130,7 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **Numbers pending.** We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them.
+> **No valid VLM-effect number yet.** We publish every number — including ones that look bad or turn out to be invalid — together with the exact configs and seeds that produced them (raw outputs in [`results/`](results/)).
 
 The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
 
@@ -141,10 +141,26 @@ python tools/ablation.py detector=yolov8 vlm=clip dataset=coco \
 
 (or the ablation cell in [the validation notebook](notebooks/validate_tianwen.ipynb)). It prints baseline / distilled / Δ mAP. The table to fill:
 
-| Detector | VLM | Fusion | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
-|---|---|---|---|---|---|
-| YOLOv8n | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
-| RT-DETR-l | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
+| Dataset | Detector | VLM | Fusion | Steps | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
+|---|---|---|---|---|---|---|---|
+| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | feature distillation ⚠️ *invalid* | 2000 | 0.3201 | 0.3123 | −0.0078 |
+| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | dense (region-level) distillation | 2000 | _TBD_ | _TBD_ | _TBD_ |
+| COCO | YOLOv8n | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
+| COCO | RT-DETR-l | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
+
+**⚠️ The first row is invalid — the teacher never reached the detector.** In that
+run, distillation read the detector's neck features through a separate `no_grad`
+forward, so the distillation loss only trained the projection head; the detector's
+weights were never touched by the VLM signal. The −0.0078 gap is therefore
+run-to-run variation (non-deterministic GPU kernels and mixed-precision loss scaling,
+which sees the extra loss term), not a VLM effect. This is fixed: features are now captured inside the detector's own
+training forward, and a regression test asserts the distillation loss produces
+gradients on detector weights. The run is kept in `results/` for transparency.
+
+Next: re-run with **dense (region-level) distillation** — the detector's neck map is
+projected with a 1×1 conv, pooled onto CLIP's patch grid and aligned per location
+(1 − cosine), so it learns *where* semantics occur rather than one pooled image
+vector — plus a feature-mode re-run and multiple seeds.
 
 For a **more publishable angle than COCO**, run the same ablation on industrial
 defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —

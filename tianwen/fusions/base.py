@@ -144,6 +144,43 @@ class BaseFusion(ABC, nn.Module):
         """
         pass
 
+    def _detector_forward_with_features(
+        self,
+        images: Tensor,
+        targets: Optional[List[Dict[str, Tensor]]] = None,
+        level: str = "neck",
+    ) -> Tuple[Any, Optional[Tensor]]:
+        """Run the detector and return its output plus the ``level`` feature map.
+
+        For detectors that support feature injection, the feature is captured
+        *inside the detector's own forward* via an identity injector, so it keeps
+        its autograd graph and a loss on it trains the detector. (A separate
+        ``extract_features`` call runs under ``no_grad`` and would only ever train
+        the projection head.) Only the first capture is kept: in training it comes
+        from the grad-enabled loss forward, not the later no-grad decode pass.
+        """
+        if self.detector.supports_feature_injection():
+            captured: Dict[str, Tensor] = {}
+
+            def _capture(feature: Tensor) -> Tensor:
+                captured.setdefault(level, feature)
+                return feature
+
+            self.detector.register_feature_injector(level, _capture)
+            try:
+                det_output = self.detector(images, targets)
+            finally:
+                self.detector.clear_feature_injectors()
+            if level in captured:
+                return det_output, captured[level]
+
+        det_output = self.detector(images, targets)
+        features = self.detector.extract_features(images, feature_levels=[level])
+        feature = features.get(level) if features else None
+        if feature is None and features:
+            feature = next(iter(features.values()))
+        return det_output, feature
+
     def get_trainable_params(self) -> List[nn.Parameter]:
         """Get list of trainable parameters."""
         params = []
