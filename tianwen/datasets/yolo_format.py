@@ -36,6 +36,31 @@ def _infer_label_dir(image_dir: str) -> str:
     return os.path.join(os.path.dirname(image_dir.rstrip("/")), "labels")
 
 
+def split_indices(
+    n_images: int, train_fraction: float = 1.0, dev_size: int = 0, seed: int = 0
+) -> Tuple[List[int], List[int], List[int]]:
+    """Deterministic ``(train, dev, rest)`` index split of a training set.
+
+    The dev images (the first ``dev_size`` of a seeded permutation) are the same
+    for every ``train_fraction``; the training subset is the next
+    ``round(n_images * train_fraction)`` images and ``rest`` is everything left
+    (the "unlabeled" pool in semi-supervised experiments). Shared by
+    :class:`YOLOFormatDataModule` and :mod:`tianwen.semi` so distillation and
+    pseudo-labelling experiments use exactly the same labelled images.
+    """
+    import torch
+
+    if not 0.0 < train_fraction <= 1.0:
+        raise ValueError(f"train_fraction must be in (0, 1], got {train_fraction}")
+    gen = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(n_images, generator=gen).tolist()
+    dev, pool = perm[:dev_size], perm[dev_size:]
+    if not pool:
+        raise ValueError(f"dev_size={dev_size} leaves no training images.")
+    n = max(1, min(len(pool), round(n_images * train_fraction)))
+    return sorted(pool[:n]), sorted(dev), sorted(pool[n:])
+
+
 class YOLOFormatDataset(BaseDataset):
     """Detection dataset reading Ultralytics-style YOLO ``.txt`` labels."""
 
@@ -199,24 +224,16 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         # for every ``train_fraction``; the training subset is drawn from the rest.
         self.dev_dataset = None
         if dev_size > 0 or train_fraction < 1.0:
-            import torch
             from torch.utils.data import Subset
 
             full = self.train_dataset
             if full is self.val_dataset and dev_size > 0:
                 raise ValueError("dev_size needs a separate training split.")
-            gen = torch.Generator().manual_seed(subset_seed)
-            perm = torch.randperm(len(full), generator=gen).tolist()
-            dev_idx, pool = perm[:dev_size], perm[dev_size:]
-            if not pool:
-                raise ValueError(f"dev_size={dev_size} leaves no training images.")
-            # Low-data regime: a fixed random subset of the remaining training
-            # images, identical across training seeds and both ablation arms.
-            n = max(1, min(len(pool), round(len(full) * train_fraction)))
-            self.train_dataset = Subset(full, sorted(pool[:n]))
+            train_idx, dev_idx, _ = split_indices(len(full), train_fraction, dev_size, subset_seed)
+            self.train_dataset = Subset(full, train_idx)
             self.train_dataset.collate_fn = full.collate_fn
             if dev_idx:
-                self.dev_dataset = Subset(full, sorted(dev_idx))
+                self.dev_dataset = Subset(full, dev_idx)
                 self.dev_dataset.collate_fn = full.collate_fn
 
     def _loader(self, dataset, shuffle: bool):

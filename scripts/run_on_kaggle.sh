@@ -14,6 +14,8 @@
 #   VLM_MODEL                     - teacher, e.g. openai/clip-vit-large-patch14-336
 #   MAX_EPOCHS                    - converged multi-arm protocol (epochs; overrides MAX_STEPS)
 #   PATIENCE / DEV_SIZE / ARMS    - early stopping, dev split size, arms (baseline,clip,random)
+#   SCRIPT                        - run (distillation, default) | ssl (pseudo-label arm)
+#   SSL_ARM / STUDENT_EPOCHS / LABELLER_EPOCHS / IMGSZ / CONF - pseudo-label arm settings
 #   TIANWEN_REF                   - TianWen branch/tag the kernel clones (default main)
 #   SEED                          - seed shared by both arms (default 0)
 #   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
@@ -55,6 +57,8 @@ cmd_push() {
   local limit_val="${LIMIT_VAL:-None}"
   local mode="${DISTILL_MODE:-dense}"
   mkdir -p "$WORK"
+  local src="$REPO_DIR/kaggle/run.py"
+  [ "${SCRIPT:-run}" = "ssl" ] && src="$REPO_DIR/kaggle/ssl_run.py"
   sed -e "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" \
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
@@ -67,7 +71,13 @@ cmd_push() {
       -e "s/^DISTILL_WEIGHT = .*/DISTILL_WEIGHT = ${DISTILL_WEIGHT:-1.0}/" \
       -e "s/^TRAIN_FRACTION = .*/TRAIN_FRACTION = ${TRAIN_FRACTION:-1.0}/" \
       -e "s#^VLM_MODEL = .*#VLM_MODEL = \"${VLM_MODEL:-openai/clip-vit-base-patch32}\"#" \
-      "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
+      -e "s/^SSL_ARM = .*/SSL_ARM = \"${SSL_ARM:-supervised}\"/" \
+      -e "s/^LABELED_FRACTION = .*/LABELED_FRACTION = ${TRAIN_FRACTION:-0.1}/" \
+      -e "s/^STUDENT_EPOCHS = .*/STUDENT_EPOCHS = ${STUDENT_EPOCHS:-60}/" \
+      -e "s/^LABELLER_EPOCHS = .*/LABELLER_EPOCHS = ${LABELLER_EPOCHS:-60}/" \
+      -e "s/^IMGSZ = .*/IMGSZ = ${IMGSZ:-320}/" \
+      -e "s/^CONF = .*/CONF = ${CONF:-0.5}/" \
+      "$src" > "$WORK/run.py"
   sed -e "s#__USERNAME__/tianwen-ablation#${KAGGLE_USERNAME}/${KERNEL_NAME}#" \
       -e "s#\"title\": \"tianwen-ablation\"#\"title\": \"${KERNEL_NAME}\"#" \
       -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
