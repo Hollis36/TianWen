@@ -130,7 +130,7 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **Current finding: no measurable VLM effect yet.** Dense distillation over 3 seeds gives Δ mAP@50:95 = −0.0000 ± 0.0107 on DsPCBSD+. We publish every number — including ones that look bad or turn out to be invalid — together with the exact configs and seeds that produced them (raw outputs in [`results/`](results/)).
+> **Current finding: the VLM teacher helps when labels are scarce, not when they are plentiful.** On DsPCBSD+ with 10% of the training images, dense CLIP distillation improves YOLOv8n by **+0.0153 ± 0.0027 mAP@50:95 (3/3 seeds, ≈ +8% relative)**; with 100% of the data the effect is −0.0000 ± 0.0107. We publish every number — including ones that look bad or turn out to be invalid — with the exact configs and seeds that produced them (raw outputs in [`results/`](results/); `python scripts/summarize_results.py` regenerates the summary).
 
 The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
 
@@ -158,16 +158,36 @@ which sees the extra loss term), not a VLM effect. This is fixed: features are n
 training forward, and a regression test asserts the distillation loss produces
 gradients on detector weights. The run is kept in `results/` for transparency.
 
-**Fixed-code runs (Kaggle T4, torch 2.11/cu130, full val split, paired seeds).**
-Dense (region-level) distillation — neck map projected with a 1×1 conv, pooled onto
-CLIP's patch grid, aligned per location (1 − cosine) — gives per-seed Δ mAP@50:95 of
-+0.0076 / −0.0123 / +0.0046, i.e. **−0.0000 ± 0.0107 (mean ± std, n=3)**; Δ mAP@50 is
-+0.0014 ± 0.0163. Pooled feature distillation (seed 0) gives −0.0061. The encouraging
-seed-0 result did **not** replicate: with CLIP-B/32 as teacher, weight 1.0 and 2000
-steps, distillation does not improve YOLOv8n on DsPCBSD+, and it *increases* variance
-(distilled std 0.0119 vs baseline 0.0014). Likely causes to test next: CLIP's 7×7
-patch grid at 224 px is far too coarse for small PCB defects; the distillation weight
-is untuned; and CLIP features are not defect-aware (domain gap).
+**Fixed-code runs (Kaggle T4, torch 2.11/cu130, 2000 steps, batch 8, full val split, paired seeds).**
+Each row is a paired ablation: same seed, data and schedule, teacher off vs on. Δ is
+mAP@50:95 (distilled − baseline), mean ± std over seeds. Verdict rule: effective if
+mean Δ > 0.006 (baseline seed-to-seed spread) and ≥ 2/3 of seeds positive.
+
+| Train data | Fusion | Teacher | Weight | Seeds | Δ mAP@50:95 | Verdict |
+|---|---|---|---|---|---|---|
+| **10% (821 imgs)** | dense | CLIP-B/32 | 1.0 | 3 | **+0.0153 ± 0.0027** (+0.0127 / +0.0181 / +0.0150) | ✅ **effective** |
+| 100% | dense | CLIP-B/32 | 1.0 | 3 | −0.0000 ± 0.0107 | no effect |
+| 100% | dense | CLIP-B/32 | 0.1 | 3 | −0.0030 ± 0.0059 | no effect |
+| 100% | dense | CLIP-B/32 | 0.3 | 1 | +0.0031 | — |
+| 100% | dense | CLIP-L/14-336 | 1.0 | 2 | −0.0025 ± 0.0051 | no effect |
+| 100% | region (GT-box crops, ViLD-style) | CLIP-B/32 | 1.0 | 3 | −0.0083 ± 0.0061 (0/3 positive) | harmful |
+| 100% | feature (pooled) | CLIP-B/32 | 1.0 | 1 | −0.0061 | — |
+
+10% baseline mAP@50:95 is 0.19 vs 0.31 with full data. More 10% seeds and a
+data-fraction curve (5 / 25 / 50%) are running.
+
+**Teacher-quality diagnostic** (linear probe, 9-way defect classification on 3000/1500
+GT-box crops): majority 0.225 · raw 32×32 pixels 0.549 · COCO-pretrained YOLOv8n P3
+RoI features 0.619 · **CLIP-B/32 crop embedding 0.731** · CLIP-B/32 zero-shot from
+class descriptions 0.187. CLIP's *visual* features carry defect information the
+untrained student lacks, but CLIP does not know the defect *names*.
+
+**Interpretation.** The teacher's knowledge is useful only while the student is
+data-starved; with 16k labelled boxes the student already exceeds it, and forcing
+its localization features toward CLIP's global semantics becomes interference — the
+strongest transfer (region-crop distillation) is the only one that hurts on every
+seed. Resolution is not the bottleneck: images are 226×226 and a 24×24-grid teacher
+(CLIP-L/14-336) does not help either.
 
 For a **more publishable angle than COCO**, run the same ablation on industrial
 defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —
