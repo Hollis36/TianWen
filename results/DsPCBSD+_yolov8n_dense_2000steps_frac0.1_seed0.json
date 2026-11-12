@@ -1,0 +1,22 @@
+{
+  "baseline_mAP50": 0.3668352961540222,
+  "baseline_mAP50_95": 0.193521648645401,
+  "distilled_mAP50": 0.3777076303958893,
+  "distilled_mAP50_95": 0.20625430345535278,
+  "delta_mAP50": 0.010872334241867065,
+  "delta_mAP50_95": 0.012732654809951782,
+  "dataset": "DsPCBSD+",
+  "num_classes": 9,
+  "detector": "yolov8n",
+  "vlm": "openai/clip-vit-base-patch32",
+  "max_steps": 2000,
+  "distill_mode": "dense",
+  "seed": 0,
+  "tianwen_commit": "d11f66192d5171f749bfc946b13754e9becc1076",
+  "distill_weight": 1.0,
+  "train_fraction": 0.1,
+  "n_train_images": 821,
+  "n_val_images": 2051,
+  "torch": "2.11.0+cu130",
+  "gpu": "Tesla T4"
+}
