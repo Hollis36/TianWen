@@ -130,7 +130,7 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **No valid VLM-effect number yet.** We publish every number — including ones that look bad or turn out to be invalid — together with the exact configs and seeds that produced them (raw outputs in [`results/`](results/)).
+> **First valid VLM-effect numbers are in (single seed — not yet significant).** We publish every number — including ones that look bad or turn out to be invalid — together with the exact configs and seeds that produced them (raw outputs in [`results/`](results/)).
 
 The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
 
@@ -144,7 +144,8 @@ python tools/ablation.py detector=yolov8 vlm=clip dataset=coco \
 | Dataset | Detector | VLM | Fusion | Steps | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
 |---|---|---|---|---|---|---|---|
 | DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | feature distillation ⚠️ *invalid* | 2000 | 0.3201 | 0.3123 | −0.0078 |
-| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | dense (region-level) distillation | 2000 | _TBD_ | _TBD_ | _TBD_ |
+| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | **dense (region-level) distillation**, seed 0 | 2000 | 0.3144 | 0.3220 | **+0.0076** |
+| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | feature (pooled) distillation, seed 0 | 2000 | 0.3200 | 0.3139 | −0.0061 |
 | COCO | YOLOv8n | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
 | COCO | RT-DETR-l | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
 
@@ -157,10 +158,15 @@ which sees the extra loss term), not a VLM effect. This is fixed: features are n
 training forward, and a regression test asserts the distillation loss produces
 gradients on detector weights. The run is kept in `results/` for transparency.
 
-Next: re-run with **dense (region-level) distillation** — the detector's neck map is
-projected with a 1×1 conv, pooled onto CLIP's patch grid and aligned per location
-(1 − cosine), so it learns *where* semantics occur rather than one pooled image
-vector — plus a feature-mode re-run and multiple seeds.
+**Fixed-code runs (Kaggle T4, torch 2.11/cu130, seed 0, full val split).** Dense
+(region-level) distillation — the neck map is projected with a 1×1 conv, pooled onto
+CLIP's patch grid and aligned per location (1 − cosine) — gives **+0.0076 mAP@50:95
+(+0.0131 mAP@50)**; pooled feature distillation gives −0.0061. The direction matches
+the hypothesis (*where* semantics occur matters more than one pooled image vector),
+**but it is not yet significant**: three baseline runs of the identical config
+(0.3201 / 0.3144 / 0.3200) spread by ~0.006 mAP@50:95 from GPU non-determinism alone.
+Seeds 1–2 for dense are running; the claim stands only if the paired Δ is positive
+across seeds (mean ± std reported here).
 
 For a **more publishable angle than COCO**, run the same ablation on industrial
 defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —

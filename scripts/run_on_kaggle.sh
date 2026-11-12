@@ -9,6 +9,7 @@
 #   MAX_STEPS                     - training steps per arm (default 2000)
 #   DISTILL_MODE                  - dense (default) | feature | logit | response
 #   ACCELERATOR                   - Kaggle accelerator (default NvidiaTeslaT4)
+#   SEED                          - seed shared by both arms (default 0)
 #   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
 #                                   names to run several arms in parallel
 #
@@ -51,6 +52,7 @@ cmd_push() {
   sed -e "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" \
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
+      -e "s/^SEED = .*/SEED = ${SEED:-0}/" \
       "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
   sed -e "s#__USERNAME__/tianwen-ablation#${KAGGLE_USERNAME}/${KERNEL_NAME}#" \
       -e "s#\"title\": \"tianwen-ablation\"#\"title\": \"${KERNEL_NAME}\"#" \
@@ -77,7 +79,7 @@ cmd_poll() {
       # Persist into the repo so results survive ephemeral containers.
       mkdir -p "$REPO_DIR/results"
       local name
-      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('distill_mode','feature')}_{d.get('max_steps','x')}steps\")")"
+      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('distill_mode','feature')}_{d.get('max_steps','x')}steps_seed{d.get('seed',0)}\")")"
       cp "$WORK/out/ablation_result.json" "$REPO_DIR/results/${name}.json"
       echo "Saved to results/${name}.json (commit it to keep it)."
     else

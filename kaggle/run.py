@@ -22,6 +22,7 @@ BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
 DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
+SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 
 # --- Set up TianWen -------------------------------------------------------
 # Use Kaggle's preinstalled torch (Python 3.13 images ship torch>=2.6, which also
@@ -171,6 +172,7 @@ result = run_distillation_ablation(
     limit_val_batches=LIMIT_VAL_BATCHES,
     accelerator="auto",
     precision="16-mixed",
+    seed=SEED,
 )
 
 result.update(
@@ -181,6 +183,9 @@ result.update(
         "vlm": VLM_MODEL,
         "max_steps": MAX_STEPS,
         "distill_mode": DISTILL_MODE,
+        "seed": SEED,
+        "torch": torch.__version__,
+        "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }
 )
 print("ABLATION_RESULT_JSON " + json.dumps(result), flush=True)
