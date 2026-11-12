@@ -65,6 +65,12 @@ cmd_poll() {
     echo "=== ablation result ==="
     if [ -f "$WORK/out/ablation_result.json" ]; then
       cat "$WORK/out/ablation_result.json"
+      # Persist into the repo so results survive ephemeral containers.
+      mkdir -p "$REPO_DIR/results"
+      local name
+      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('max_steps','x')}steps\")")"
+      cp "$WORK/out/ablation_result.json" "$REPO_DIR/results/${name}.json"
+      echo "Saved to results/${name}.json (commit it to keep it)."
     else
       grep -ah "ABLATION_RESULT_JSON" "$WORK"/out/*.log 2>/dev/null || echo "(no result file; see $WORK/out)"
     fi
