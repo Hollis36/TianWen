@@ -1,0 +1,46 @@
+{
+  "arms": {
+    "baseline": {
+      "mAP50": 0.3972824513912201,
+      "mAP50_95": 0.22815482318401337,
+      "best_epoch": 7,
+      "epochs_trained": 18,
+      "dev_mAP50_95": 0.24363166093826294
+    },
+    "clip": {
+      "mAP50": 0.4192724823951721,
+      "mAP50_95": 0.23597931861877441,
+      "best_epoch": 32,
+      "epochs_trained": 43,
+      "dev_mAP50_95": 0.25528469681739807
+    },
+    "random": {
+      "mAP50": 0.41226354241371155,
+      "mAP50_95": 0.23164857923984528,
+      "best_epoch": 14,
+      "epochs_trained": 25,
+      "dev_mAP50_95": 0.2617669999599457
+    }
+  },
+  "delta_clip_mAP50": 0.021990031003952026,
+  "delta_clip_mAP50_95": 0.007824495434761047,
+  "delta_random_mAP50": 0.014981091022491455,
+  "delta_random_mAP50_95": 0.003493756055831909,
+  "dataset": "DsPCBSD+",
+  "num_classes": 9,
+  "detector": "yolov8n",
+  "vlm": "openai/clip-vit-base-patch32",
+  "max_steps": 2000,
+  "distill_mode": "dense",
+  "seed": 0,
+  "tianwen_commit": "1b8f06faf1a612b1d71330775e8ea3348cae6cb3",
+  "distill_weight": 1.0,
+  "train_fraction": 0.1,
+  "n_train_images": 821,
+  "n_val_images": 2051,
+  "n_dev_images": 500,
+  "max_epochs": 60,
+  "patience": 10,
+  "torch": "2.11.0+cu130",
+  "gpu": "Tesla T4"
+}
