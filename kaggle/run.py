@@ -24,6 +24,7 @@ DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "
 DETECTOR = "yolov8n"
 DISTILL_WEIGHT = 1.0  # distillation loss weight of the distilled arm
 TRAIN_FRACTION = 1.0  # <1.0 = fixed random subset of the train split (low-data regime)
+TIANWEN_REF = "main"  # branch/tag of TianWen to clone
 SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 
 # --- Set up TianWen -------------------------------------------------------
@@ -33,8 +34,14 @@ SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 # build, which still covers sm_50..sm_90.
 if not os.path.exists("TianWen"):
     subprocess.run(
-        ["git", "clone", "--depth", "1", "https://github.com/Hollis36/TianWen.git"], check=True
+        ["git", "clone", "--depth", "1", "--branch", TIANWEN_REF,
+         "https://github.com/Hollis36/TianWen.git"],
+        check=True,
     )
+TIANWEN_COMMIT = subprocess.run(
+    ["git", "-C", "TianWen", "rev-parse", "HEAD"], capture_output=True, text=True
+).stdout.strip()
+print("TianWen", TIANWEN_REF, TIANWEN_COMMIT, flush=True)
 
 
 def _torch_supports_gpu() -> bool:
@@ -190,6 +197,7 @@ result.update(
         "max_steps": MAX_STEPS,
         "distill_mode": DISTILL_MODE,
         "seed": SEED,
+        "tianwen_commit": TIANWEN_COMMIT,
         "distill_weight": DISTILL_WEIGHT,
         "train_fraction": TRAIN_FRACTION,
         "torch": torch.__version__,
