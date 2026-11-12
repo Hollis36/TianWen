@@ -130,7 +130,7 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **Numbers pending.** We're committed to publishing every number — including ones that look bad — together with the exact configs and seeds that produced them.
+> **First numbers are in — and the first one is negative.** We publish every number, including ones that look bad, together with the exact configs and seeds that produced them (raw outputs in [`results/`](results/)).
 
 The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
 
@@ -141,10 +141,20 @@ python tools/ablation.py detector=yolov8 vlm=clip dataset=coco \
 
 (or the ablation cell in [the validation notebook](notebooks/validate_tianwen.ipynb)). It prints baseline / distilled / Δ mAP. The table to fill:
 
-| Detector | VLM | Fusion | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
-|---|---|---|---|---|---|
-| YOLOv8n | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
-| RT-DETR-l | CLIP-ViT-B/32 | feature distillation | _TBD_ | _TBD_ | _TBD_ |
+| Dataset | Detector | VLM | Fusion | Steps | Baseline mAP@50:95 | Distilled mAP@50:95 | Δ |
+|---|---|---|---|---|---|---|---|
+| DsPCBSD+ (PCB defects, 9 cls) | YOLOv8n | CLIP-ViT-B/32 | feature distillation | 2000 | 0.3201 | 0.3123 | **−0.0078** |
+| COCO | YOLOv8n | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
+| COCO | RT-DETR-l | CLIP-ViT-B/32 | feature distillation | — | _TBD_ | _TBD_ | _TBD_ |
+
+**Reading the first row honestly:** with CLIP-B/32 feature distillation, the teacher
+slightly *hurts* (−0.0078 mAP@50:95, −0.0094 mAP@50). It is a single seed, so the
+effect is not yet separated from run-to-run noise. A likely cause: when the detector's
+neck tokens and CLIP's patch tokens differ in count, feature distillation aligns only
+the *pooled, image-level* embeddings — a signal poorly matched to tiny, localized PCB
+defects, competing with the detection loss at weight 1.0. Next runs: multiple seeds,
+a lower distillation weight, few-shot subsets, and spatially dense (region-level)
+distillation.
 
 For a **more publishable angle than COCO**, run the same ablation on industrial
 defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —

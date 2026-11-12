@@ -1,0 +1,14 @@
+{
+  "baseline_mAP50": 0.5459213852882385,
+  "baseline_mAP50_95": 0.3200874626636505,
+  "distilled_mAP50": 0.5365335941314697,
+  "distilled_mAP50_95": 0.3122733533382416,
+  "delta_mAP50": -0.009387791156768799,
+  "delta_mAP50_95": -0.007814109325408936,
+  "dataset": "DsPCBSD+",
+  "num_classes": 9,
+  "detector": "yolov8n",
+  "vlm": "openai/clip-vit-base-patch32",
+  "max_steps": 2000,
+  "note": "Kaggle P100, torch 2.5.1/cu121, transformers 4.46.0, seed 0, full validation split, feature distillation (weight 1.0). Single seed."
+}
