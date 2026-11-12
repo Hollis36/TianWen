@@ -154,6 +154,7 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         num_workers: int = 0,
         train_fraction: float = 1.0,
         subset_seed: int = 0,
+        dev_size: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -183,19 +184,31 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
             if train_images
             else self.val_dataset
         )
-        if train_fraction < 1.0:
-            # Low-data regime: a fixed random subset of the training split. The
-            # subset depends only on ``subset_seed``, so every training seed and
-            # both ablation arms see exactly the same images.
+        # Optional held-out dev split (for early stopping / model selection) carved
+        # from the training images, so the official validation split stays a clean
+        # test set. The dev images are fixed by ``subset_seed`` and are the same
+        # for every ``train_fraction``; the training subset is drawn from the rest.
+        self.dev_dataset = None
+        if dev_size > 0 or train_fraction < 1.0:
             import torch
             from torch.utils.data import Subset
 
             full = self.train_dataset
-            n = max(1, round(len(full) * train_fraction))
+            if full is self.val_dataset and dev_size > 0:
+                raise ValueError("dev_size needs a separate training split.")
             gen = torch.Generator().manual_seed(subset_seed)
-            idx = torch.randperm(len(full), generator=gen)[:n].tolist()
-            self.train_dataset = Subset(full, sorted(idx))
+            perm = torch.randperm(len(full), generator=gen).tolist()
+            dev_idx, pool = perm[:dev_size], perm[dev_size:]
+            if not pool:
+                raise ValueError(f"dev_size={dev_size} leaves no training images.")
+            # Low-data regime: a fixed random subset of the remaining training
+            # images, identical across training seeds and both ablation arms.
+            n = max(1, min(len(pool), round(len(full) * train_fraction)))
+            self.train_dataset = Subset(full, sorted(pool[:n]))
             self.train_dataset.collate_fn = full.collate_fn
+            if dev_idx:
+                self.dev_dataset = Subset(full, sorted(dev_idx))
+                self.dev_dataset.collate_fn = full.collate_fn
 
     def _loader(self, dataset, shuffle: bool):
         from torch.utils.data import DataLoader
@@ -212,7 +225,9 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         return self._loader(self.train_dataset, shuffle=True)
 
     def val_dataloader(self):
-        return self._loader(self.val_dataset, shuffle=False)
+        # With a dev split, validation (early stopping) never sees the test split.
+        dataset = self.dev_dataset if self.dev_dataset is not None else self.val_dataset
+        return self._loader(dataset, shuffle=False)
 
     def test_dataloader(self):
         return self._loader(self.val_dataset, shuffle=False)

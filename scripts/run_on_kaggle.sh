@@ -12,6 +12,8 @@
 #   DISTILL_WEIGHT                - distillation loss weight (default 1.0)
 #   TRAIN_FRACTION                - fraction of the train split to use (default 1.0)
 #   VLM_MODEL                     - teacher, e.g. openai/clip-vit-large-patch14-336
+#   MAX_EPOCHS                    - converged multi-arm protocol (epochs; overrides MAX_STEPS)
+#   PATIENCE / DEV_SIZE / ARMS    - early stopping, dev split size, arms (baseline,clip,random)
 #   TIANWEN_REF                   - TianWen branch/tag the kernel clones (default main)
 #   SEED                          - seed shared by both arms (default 0)
 #   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
@@ -57,6 +59,10 @@ cmd_push() {
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
       -e "s/^SEED = .*/SEED = ${SEED:-0}/" \
+      -e "s/^MAX_EPOCHS = .*/MAX_EPOCHS = ${MAX_EPOCHS:-None}/" \
+      -e "s/^PATIENCE = .*/PATIENCE = ${PATIENCE:-10}/" \
+      -e "s/^DEV_SIZE = .*/DEV_SIZE = ${DEV_SIZE:-0}/" \
+      -e "s/^ARMS = .*/ARMS = \"${ARMS:-baseline,clip,random}\"/" \
       -e "s#^TIANWEN_REF = .*#TIANWEN_REF = \"${TIANWEN_REF:-main}\"#" \
       -e "s/^DISTILL_WEIGHT = .*/DISTILL_WEIGHT = ${DISTILL_WEIGHT:-1.0}/" \
       -e "s/^TRAIN_FRACTION = .*/TRAIN_FRACTION = ${TRAIN_FRACTION:-1.0}/" \

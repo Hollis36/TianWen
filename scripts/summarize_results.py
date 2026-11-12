@@ -28,6 +28,18 @@ def main() -> None:
         if d.get("valid") is False:
             continue
         key = re.sub(r"_seed\d+$", "", os.path.splitext(os.path.basename(path))[0])
+        if "arms" in d:
+            # Multi-arm result: one row per non-baseline arm, delta vs baseline.
+            for arm in d["arms"]:
+                if arm == "baseline":
+                    continue
+                groups[f"{key} [{arm}]"].append(
+                    {
+                        "delta_mAP50_95": d[f"delta_{arm}_mAP50_95"],
+                        "delta_mAP50": d[f"delta_{arm}_mAP50"],
+                    }
+                )
+            continue
         groups[key].append(d)
 
     print(f"{'config':<58} {'n':>2}  {'Δ mAP50:95 mean ± std':>24}  {'Δ mAP50 mean':>12}  seeds(+)  verdict")

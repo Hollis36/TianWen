@@ -57,6 +57,7 @@ def build_datamodule(cfg):
             num_workers=cfg.get("num_workers", 0),
             train_fraction=cfg.get("train_fraction", 1.0),
             subset_seed=cfg.get("subset_seed", 0),
+            dev_size=cfg.get("dev_size", 0),
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")

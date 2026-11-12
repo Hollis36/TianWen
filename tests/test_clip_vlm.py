@@ -70,3 +70,27 @@ def test_clip_drives_distillation(clip_vlm):
         if p.grad is not None and torch.count_nonzero(p.grad) > 0
     ]
     assert len(proj_grads) > 0
+
+
+def test_random_init_teacher_differs_from_pretrained_and_is_seeded():
+    pytest.importorskip("transformers")
+    import torch
+
+    from tianwen.vlms.clip_vlm import CLIPVLM
+
+    name = "hf-internal-testing/tiny-random-CLIPModel"
+    try:
+        pre = CLIPVLM(model_name=name)
+        r1 = CLIPVLM(model_name=name, random_init=True, init_seed=0)
+        r2 = CLIPVLM(model_name=name, random_init=True, init_seed=0)
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Could not load CLIP: {exc}")
+
+    def w(v):  # the vision encoder's first learned weights
+        return v.model.vision_model.embeddings.patch_embedding.weight
+
+    p_pre, p1, p2 = w(pre), w(r1), w(r2)
+    assert p_pre.shape == p1.shape
+    assert not torch.equal(p_pre, p1)
+    assert torch.equal(p1, p2)  # same init_seed -> same random teacher
+    assert all(not p.requires_grad for p in r1.model.parameters())  # still frozen

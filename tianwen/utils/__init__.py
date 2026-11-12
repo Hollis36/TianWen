@@ -1,6 +1,6 @@
 """Utility functions for TianWen framework."""
 
-from tianwen.utils.ablation import run_distillation_ablation
+from tianwen.utils.ablation import run_distillation_ablation, run_teacher_ablation
 from tianwen.utils.analysis import (
     AblationStudy,
     FeatureVisualizer,
@@ -45,6 +45,7 @@ __all__ = [
     "load_detector_checkpoint",
     # Benchmarking
     "run_distillation_ablation",
+    "run_teacher_ablation",
     # Experiment management
     "ExperimentManager",
     "ExperimentResult",
