@@ -126,3 +126,4 @@ def test_supervised_arm_end_to_end_smoke(splits, tmp_path):
     assert out["ssl_arm"] == "self" and 0.0 <= out["mAP50_95"] <= 1.0
     assert "pseudo_mAP50" in out and out["n_pseudo_images"] == 11
     assert 0.0 <= out["labeller_test_eval_mAP50_95"] <= 1.0
+    assert 0.0 <= out["student_test_eval_mAP50_95"] <= 1.0

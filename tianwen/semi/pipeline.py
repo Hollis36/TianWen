@@ -108,21 +108,9 @@ def run_ssl_arm(
         pseudo_dir = os.path.join(work_dir, "pseudo")
         out.update(write_pseudo_dataset(splits, preds, conf, pseudo_dir))
         data_yaml = os.path.join(pseudo_dir, "data.yaml")
-        # Labeller's own test accuracy with the same evaluator as the
-        # pseudo-label scores, so every labeller (incl. RF-DETR) is comparable.
-        test_dir = os.path.join(splits.root, "test")
-        test_images = sorted(
-            os.path.join(test_dir, "images", f)
-            for f in os.listdir(os.path.join(test_dir, "images"))
-        )
-        test_q = pseudo_label_quality(
-            test_images,
-            labeller.predict(test_images, conf=0.05),
-            os.path.join(test_dir, "labels"),
-            conf,
-        )
-        out["labeller_test_eval_mAP50"] = test_q["pseudo_mAP50"]
-        out["labeller_test_eval_mAP50_95"] = test_q["pseudo_mAP50_95"]
+        # Labeller's own test accuracy with the shared evaluator, so every
+        # labeller (incl. RF-DETR) is comparable with the student below.
+        out.update(_score_on_test(labeller, splits, conf, prefix="labeller_test_eval"))
         if isinstance(labeller, UltralyticsLabeller):
             # Report the labeller's own test mAP for reference.
             m = labeller.model.val(
@@ -141,4 +129,18 @@ def run_ssl_arm(
     out["student_seconds"] = round(time.time() - t1, 1)
     out["mAP50"] = student["mAP50"]
     out["mAP50_95"] = student["mAP50_95"]
+    # Same evaluator as the labeller score (Ultralytics' val differs by ~0.02).
+    student_predictor = UltralyticsLabeller().load(student["best_weights"])
+    out.update(_score_on_test(student_predictor, splits, conf, prefix="student_test_eval"))
     return out
+
+
+def _score_on_test(predictor, splits: SSLSplits, conf: float, prefix: str) -> Dict[str, float]:
+    """Score ``predictor`` on the test split with :func:`pseudo_label_quality`."""
+    test_dir = os.path.join(splits.root, "test")
+    image_dir = os.path.join(test_dir, "images")
+    images = sorted(os.path.join(image_dir, f) for f in os.listdir(image_dir))
+    q = pseudo_label_quality(
+        images, predictor.predict(images, conf=0.05), os.path.join(test_dir, "labels"), conf
+    )
+    return {f"{prefix}_mAP50": q["pseudo_mAP50"], f"{prefix}_mAP50_95": q["pseudo_mAP50_95"]}
