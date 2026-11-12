@@ -8,6 +8,8 @@
 # Optional:
 #   MAX_STEPS                     - training steps per arm (default 2000)
 #   DISTILL_MODE                  - dense (default) | feature | logit | response
+#   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
+#                                   names to run several arms in parallel
 #
 # Usage:
 #   KAGGLE_USERNAME=... KAGGLE_KEY=... DATASET_SLUG=owner/name ./scripts/run_on_kaggle.sh push
@@ -17,7 +19,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="${TIANWEN_KAGGLE_WORK:-/tmp/tianwen-kaggle}"
+KERNEL_NAME="${KERNEL_NAME:-tianwen-ablation}"
+WORK="${TIANWEN_KAGGLE_WORK:-/tmp/tianwen-kaggle/${KERNEL_NAME}}"
 SLUG_FILE="$WORK/slug.txt"
 
 write_creds() {
@@ -48,10 +51,12 @@ cmd_push() {
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
       "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
-  sed -e "s#__USERNAME__#${KAGGLE_USERNAME}#" -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
+  sed -e "s#__USERNAME__/tianwen-ablation#${KAGGLE_USERNAME}/${KERNEL_NAME}#" \
+      -e "s#\"title\": \"tianwen-ablation\"#\"title\": \"${KERNEL_NAME}\"#" \
+      -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
       "$REPO_DIR/kaggle/kernel-metadata.json" > "$WORK/kernel-metadata.json"
-  echo "${KAGGLE_USERNAME}/tianwen-ablation" > "$SLUG_FILE"
-  echo "Pushing kernel ${KAGGLE_USERNAME}/tianwen-ablation (dataset=${DATASET_SLUG}, steps=${steps})..."
+  echo "${KAGGLE_USERNAME}/${KERNEL_NAME}" > "$SLUG_FILE"
+  echo "Pushing kernel ${KAGGLE_USERNAME}/${KERNEL_NAME} (dataset=${DATASET_SLUG}, steps=${steps})..."
   kaggle kernels push -p "$WORK"
   echo "Pushed. Poll with: ./scripts/run_on_kaggle.sh poll"
 }
@@ -59,7 +64,7 @@ cmd_push() {
 cmd_poll() {
   write_creds
   local slug
-  slug="$(cat "$SLUG_FILE" 2>/dev/null || echo "${KAGGLE_USERNAME:-}/tianwen-ablation")"
+  slug="$(cat "$SLUG_FILE" 2>/dev/null || echo "${KAGGLE_USERNAME:-}/${KERNEL_NAME}")"
   local status
   status="$(kaggle kernels status "$slug" 2>&1 | tr -d '\r')"
   echo "$status"
