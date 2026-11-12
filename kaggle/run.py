@@ -20,8 +20,11 @@ LIMIT_VAL_BATCHES = None  # cap test batches for a quick number (None = full val
 IMAGE_SIZE = 640
 BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
-DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
+DISTILL_MODE = "dense"  # "dense" (patch grid), "region" (GT-box crops), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
+DISTILL_WEIGHT = 1.0  # distillation loss weight of the distilled arm
+TRAIN_FRACTION = 1.0  # <1.0 = fixed random subset of the train split (low-data regime)
+TIANWEN_REF = "main"  # branch/tag of TianWen to clone
 SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 
 # --- Set up TianWen -------------------------------------------------------
@@ -31,8 +34,14 @@ SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 # build, which still covers sm_50..sm_90.
 if not os.path.exists("TianWen"):
     subprocess.run(
-        ["git", "clone", "--depth", "1", "https://github.com/Hollis36/TianWen.git"], check=True
+        ["git", "clone", "--depth", "1", "--branch", TIANWEN_REF,
+         "https://github.com/Hollis36/TianWen.git"],
+        check=True,
     )
+TIANWEN_COMMIT = subprocess.run(
+    ["git", "-C", "TianWen", "rev-parse", "HEAD"], capture_output=True, text=True
+).stdout.strip()
+print("TianWen", TIANWEN_REF, TIANWEN_COMMIT, flush=True)
 
 
 def _torch_supports_gpu() -> bool:
@@ -114,6 +123,7 @@ if coco:
             "image_size": [IMAGE_SIZE, IMAGE_SIZE],
             "batch_size": BATCH_SIZE,
             "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
         }
     )
     num_classes = 80
@@ -130,6 +140,7 @@ else:
                 "image_size": [IMAGE_SIZE, IMAGE_SIZE],
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
             }
         )
         num_classes = datamodule.num_classes
@@ -154,8 +165,14 @@ else:
                 "image_size": [IMAGE_SIZE, IMAGE_SIZE],
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
+                "train_fraction": TRAIN_FRACTION,
             }
         )
+
+# Guard against knobs being silently dropped: report the actual split sizes.
+N_TRAIN = len(datamodule.train_dataset) if hasattr(datamodule, "train_dataset") else None
+N_VAL = len(datamodule.val_dataset) if hasattr(datamodule, "val_dataset") else None
+print(f"Split sizes: train={N_TRAIN} val={N_VAL} (TRAIN_FRACTION={TRAIN_FRACTION})", flush=True)
 
 # --- Run the ablation -----------------------------------------------------
 result = run_distillation_ablation(
@@ -173,6 +190,7 @@ result = run_distillation_ablation(
     accelerator="auto",
     precision="16-mixed",
     seed=SEED,
+    distill_weight=DISTILL_WEIGHT,
 )
 
 result.update(
@@ -184,6 +202,11 @@ result.update(
         "max_steps": MAX_STEPS,
         "distill_mode": DISTILL_MODE,
         "seed": SEED,
+        "tianwen_commit": TIANWEN_COMMIT,
+        "distill_weight": DISTILL_WEIGHT,
+        "train_fraction": TRAIN_FRACTION,
+        "n_train_images": N_TRAIN,
+        "n_val_images": N_VAL,
         "torch": torch.__version__,
         "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }

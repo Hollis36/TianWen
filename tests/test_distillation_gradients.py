@@ -61,7 +61,7 @@ def _batch():
     return images, targets
 
 
-@pytest.mark.parametrize("mode", ["feature", "dense", "response"])
+@pytest.mark.parametrize("mode", ["feature", "dense", "response", "region"])
 def test_distillation_loss_trains_the_detector(models, mode):
     detector, vlm = models
     fusion = KnowledgeDistillation(detector=detector, vlm=vlm, distill_mode=mode)
@@ -87,3 +87,31 @@ def test_dense_loss_is_bounded_cosine(models):
     loss = fusion(images, targets).loss_dict["distill_loss"]
     # 1 - cosine averaged over locations lies in [0, 2].
     assert 0.0 <= float(loss.detach()) <= 2.0
+
+
+def test_region_loss_without_boxes_is_zero_and_safe(models):
+    detector, vlm = models
+    fusion = KnowledgeDistillation(detector=detector, vlm=vlm, distill_mode="region")
+    fusion.train()
+    images = torch.rand(2, 3, 320, 320)
+    empty = [{"boxes": torch.zeros(0, 4), "labels": torch.zeros(0, dtype=torch.long)}] * 2
+    loss = fusion(images, empty).loss_dict["distill_loss"]
+    assert float(loss.detach()) == 0.0
+    loss.backward()  # still part of the graph
+
+
+def test_region_teacher_sees_one_crop_per_box(models):
+    detector, vlm = models
+    fusion = KnowledgeDistillation(detector=detector, vlm=vlm, distill_mode="region")
+    images, _ = _batch()
+    targets = [
+        {
+            "boxes": torch.tensor([[10.0, 10, 60, 60], [100, 100, 140, 130]]),
+            "labels": torch.tensor([0, 1]),
+        },
+        {"boxes": torch.tensor([[5.0, 5, 300, 300]]), "labels": torch.tensor([2])},
+    ]
+    out = fusion(images, targets)
+    teacher = out.fusion_features["vlm_features"]
+    assert teacher.shape == (3, vlm.vision_hidden_size)
+    assert 0.0 <= float(out.loss_dict["distill_loss"].detach()) <= 2.0

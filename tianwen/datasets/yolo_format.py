@@ -152,9 +152,13 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         image_size: Tuple[int, int] = (640, 640),
         batch_size: int = 8,
         num_workers: int = 0,
+        train_fraction: float = 1.0,
+        subset_seed: int = 0,
         **kwargs,
     ):
         super().__init__()
+        if not 0.0 < train_fraction <= 1.0:
+            raise ValueError(f"train_fraction must be in (0, 1], got {train_fraction}")
         if data_yaml:
             parsed = _load_data_yaml(data_yaml)
             train_images = train_images or parsed["train_images"]
@@ -179,6 +183,19 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
             if train_images
             else self.val_dataset
         )
+        if train_fraction < 1.0:
+            # Low-data regime: a fixed random subset of the training split. The
+            # subset depends only on ``subset_seed``, so every training seed and
+            # both ablation arms see exactly the same images.
+            import torch
+            from torch.utils.data import Subset
+
+            full = self.train_dataset
+            n = max(1, round(len(full) * train_fraction))
+            gen = torch.Generator().manual_seed(subset_seed)
+            idx = torch.randperm(len(full), generator=gen)[:n].tolist()
+            self.train_dataset = Subset(full, sorted(idx))
+            self.train_dataset.collate_fn = full.collate_fn
 
     def _loader(self, dataset, shuffle: bool):
         from torch.utils.data import DataLoader

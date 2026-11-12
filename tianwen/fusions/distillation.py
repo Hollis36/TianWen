@@ -90,7 +90,8 @@ class KnowledgeDistillation(BaseFusion):
         Args:
             detector: Object detection model (student)
             vlm: Vision-Language Model (teacher)
-            distill_mode: Distillation mode ("feature", "logit", "response")
+            distill_mode: "feature" (pooled), "dense" (patch grid), "region" (GT-box
+                crops, ViLD-style), "logit" or "response"
             temperature: Temperature for softening distributions
             alpha: Balance between distillation and task loss
             feature_loss_weight: Weight for feature distillation loss
@@ -136,6 +137,19 @@ class KnowledgeDistillation(BaseFusion):
                 nn.Conv2d(det_feature_dim, hidden, kernel_size=1),
                 nn.GELU(),
                 nn.Conv2d(hidden, vlm_feature_dim, kernel_size=1),
+            )
+
+        elif distill_mode == "region":
+            # ViLD-style region distillation: RoI-aligned detector features of each
+            # GT box are matched to the VLM embedding of that box's *crop*, so even
+            # tiny objects get a full-resolution teacher view.
+            det_feature_dim = self._get_detector_feature_dim()
+            vlm_feature_dim = vlm.vision_hidden_size
+            hidden = projector_hidden_dim or vlm_feature_dim
+            self.region_projector = nn.Sequential(
+                nn.Linear(det_feature_dim, hidden),
+                nn.GELU(),
+                nn.Linear(hidden, vlm_feature_dim),
             )
 
         elif distill_mode == "logit":
@@ -192,14 +206,17 @@ class KnowledgeDistillation(BaseFusion):
 
         # 1. Get detector predictions and (gradient-carrying) neck features.
         neck = None
-        if self.distill_mode in ("feature", "dense", "response"):
+        if self.distill_mode in ("feature", "dense", "response", "region"):
             det_output, neck = self._detector_forward_with_features(images, targets, "neck")
         else:
             det_output = self.detector(images, targets)
 
-        # 2. Get VLM features (teacher)
-        with torch.no_grad():
-            vlm_features = self.vlm.get_visual_features(images)
+        # 2. Get VLM features (teacher). Region mode encodes box crops instead.
+        if self.distill_mode == "region":
+            vlm_features = None
+        else:
+            with torch.no_grad():
+                vlm_features = self.vlm.get_visual_features(images)
 
         # 3. Compute losses
         loss_dict = {}
@@ -217,6 +234,13 @@ class KnowledgeDistillation(BaseFusion):
         elif self.distill_mode == "dense":
             distill_loss = self._compute_dense_distill_loss(neck, vlm_features)
             loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
+
+        elif self.distill_mode == "region":
+            if targets is not None:
+                distill_loss, vlm_features = self._compute_region_distill_loss(
+                    images, neck, targets
+                )
+                loss_dict["distill_loss"] = distill_loss * self.feature_loss_weight
 
         elif self.distill_mode == "logit":
             distill_loss = self._compute_logit_distill_loss(det_output, vlm_features)
@@ -288,6 +312,103 @@ class KnowledgeDistillation(BaseFusion):
         teacher = teacher.to(dtype=student.dtype, device=student.device)
         cosine = F.cosine_similarity(student, teacher, dim=1)  # [B, g, g]
         return (1.0 - cosine).mean()
+
+    #: Max GT boxes distilled per batch (bounds the VLM crop-encoding cost).
+    region_max_boxes: int = 64
+    #: Crops are enlarged by this factor around each box to give the teacher context.
+    region_context: float = 1.5
+    #: Minimum crop side in input pixels (tiny defects still get some context).
+    region_min_size: float = 32.0
+
+    def _collect_region_boxes(
+        self, targets: List[Dict[str, Tensor]], device: torch.device
+    ) -> Optional[Tensor]:
+        """Stack GT boxes as RoIs ``[K, 5]`` = (batch_idx, x1, y1, x2, y2), capped."""
+        rois = []
+        for i, t in enumerate(targets):
+            boxes = t.get("boxes")
+            if boxes is None or boxes.numel() == 0:
+                continue
+            boxes = boxes.to(device=device, dtype=torch.float32).reshape(-1, 4)
+            idx = torch.full((boxes.shape[0], 1), float(i), device=device)
+            rois.append(torch.cat([idx, boxes], dim=1))
+        if not rois:
+            return None
+        rois = torch.cat(rois)
+        if rois.shape[0] > self.region_max_boxes:
+            keep = torch.randperm(rois.shape[0], device=device)[: self.region_max_boxes]
+            rois = rois[keep]
+        return rois
+
+    def _compute_region_distill_loss(
+        self,
+        images: Tensor,
+        det_feat: Tensor,
+        targets: List[Dict[str, Tensor]],
+    ):
+        """ViLD-style region distillation on ground-truth boxes.
+
+        Student: the detector neck map RoI-aligned over each GT box, projected to
+        the VLM width. Teacher: the VLM's CLS embedding of that box's image crop
+        (enlarged by ``region_context``, resized to the VLM's input size). Loss is
+        ``1 - cosine`` averaged over boxes. Returns ``(loss, teacher_embeddings)``.
+        """
+        from torchvision.ops import roi_align
+
+        rois = self._collect_region_boxes(targets, images.device)
+        if rois is None or det_feat is None or det_feat.dim() != 4:
+            zero = det_feat.sum() * 0.0 if det_feat is not None else images.sum() * 0.0
+            return zero, None
+
+        img_h, img_w = images.shape[-2:]
+        # Student: RoI-align on the neck map (feature stride from map/image size).
+        scale = det_feat.shape[-1] / float(img_w)
+        pooled = roi_align(
+            det_feat,
+            rois.to(det_feat.dtype),
+            output_size=(2, 2),
+            spatial_scale=scale,
+            sampling_ratio=2,
+            aligned=True,
+        ).mean(
+            dim=(2, 3)
+        )  # [K, C]
+        student = self.region_projector(pooled)
+
+        # Teacher: enlarged square-ish crops, resized to the VLM input size.
+        with torch.no_grad():
+            x1, y1, x2, y2 = rois[:, 1], rois[:, 2], rois[:, 3], rois[:, 4]
+            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+            w = ((x2 - x1) * self.region_context).clamp(min=self.region_min_size)
+            h = ((y2 - y1) * self.region_context).clamp(min=self.region_min_size)
+            crop_boxes = torch.stack(
+                [
+                    rois[:, 0],
+                    (cx - w / 2).clamp(0, img_w),
+                    (cy - h / 2).clamp(0, img_h),
+                    (cx + w / 2).clamp(0, img_w),
+                    (cy + h / 2).clamp(0, img_h),
+                ],
+                dim=1,
+            )
+            size = 224
+            get_size = getattr(self.vlm, "get_image_size", None)
+            if callable(get_size):
+                size = int(get_size()[0])
+            crops = roi_align(
+                images.float(),
+                crop_boxes,
+                output_size=(size, size),
+                spatial_scale=1.0,
+                sampling_ratio=2,
+                aligned=True,
+            )
+            tokens = self.vlm.get_visual_features(crops)
+            teacher = tokens[:, 0] if tokens.dim() == 3 else tokens  # CLS embedding
+
+        teacher = teacher.to(dtype=student.dtype, device=student.device)
+        loss = (1.0 - F.cosine_similarity(student, teacher, dim=-1)).mean()
+        return loss, teacher
 
     def _compute_feature_distill_loss(
         self,
