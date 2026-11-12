@@ -36,7 +36,7 @@ For meaningful numbers you need a GPU and real data. Free options (2026):
 
 | Platform | Free GPU | Quota | Notes |
 |---|---|---|---|
-| **Kaggle Notebooks** | T4 ×2 (32 GB total) or P100 | ~30 h/week, 12 h/session | **Best for benchmarks**: COCO is available as a ready-made Kaggle dataset (no download). |
+| **Kaggle Notebooks** | T4 ×2 (32 GB total) | ~30 h/week, 12 h/session | **Best for benchmarks**: COCO is available as a ready-made Kaggle dataset (no download). |
 | **Google Colab** | T4 (16 GB) | ~15–30 h/week, 12 h/session | Easiest to start; free T4 not guaranteed under load. |
 | **Lightning AI Studio** | GPU instances | ~80 h/month | Persistent VS Code + Jupyter; built around PyTorch Lightning (which TianWen uses). |
 | **Paperspace Gradient** | Free GPU tiers | Varies | Notebook environment with free GPU instances. |

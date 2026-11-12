@@ -22,28 +22,41 @@ BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
 DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
+SEED = 0  # same seed for both arms; repeat with several seeds for error bars
 
 # --- Set up TianWen -------------------------------------------------------
-# Pin a torch build whose CUDA binaries cover every GPU Kaggle currently hands
-# out: P100 (sm_60), T4 (sm_75), L4 (sm_89), A100 (sm_80). Kaggle's default torch
-# (cu128) dropped sm_60, so a P100 kernel fails with "no kernel image" — pinning
-# torch 2.5.1/cu121 fixes that and makes the run torch-version-reproducible.
+# Use Kaggle's preinstalled torch (Python 3.13 images ship torch>=2.6, which also
+# satisfies transformers' torch.load safety check, CVE-2025-32434). Only if that
+# build lacks kernels for the attached GPU's architecture do we swap in the cu126
+# build, which still covers sm_50..sm_90.
 if not os.path.exists("TianWen"):
     subprocess.run(
         ["git", "clone", "--depth", "1", "https://github.com/Hollis36/TianWen.git"], check=True
     )
-subprocess.run(
-    [sys.executable, "-m", "pip", "install", "-q", "torch==2.5.1", "torchvision==0.20.1",
-     "--index-url", "https://download.pytorch.org/whl/cu121"],
-    check=True,
-)
+
+
+def _torch_supports_gpu() -> bool:
+    code = (
+        "import torch,sys\n"
+        "if not torch.cuda.is_available(): sys.exit(0)\n"
+        "maj,mi=torch.cuda.get_device_capability()\n"
+        "sys.exit(0 if f'sm_{maj}{mi}' in torch.cuda.get_arch_list() else 1)\n"
+    )
+    return subprocess.run([sys.executable, "-c", code]).returncode == 0
+
+
+if not _torch_supports_gpu():
+    print("Preinstalled torch lacks this GPU's arch; installing torch cu126.", flush=True)
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-q", "torch", "torchvision",
+         "--index-url", "https://download.pytorch.org/whl/cu126"],
+        check=True,
+    )
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", "TianWen"], check=True)
 subprocess.run(
     [sys.executable, "-m", "pip", "install", "-q",
      "ultralytics", "pytorch-lightning", "torchmetrics", "omegaconf", "hydra-core",
-     # Newer transformers block torch.load unless torch>=2.6 (CVE-2025-32434);
-     # pin a version before that restriction so CLIP loads on torch 2.5.1 (P100).
-     "transformers==4.46.0", "pycocotools"],
+     "transformers", "pycocotools"],
     check=True,
 )
 sys.path.insert(0, "TianWen")
@@ -159,6 +172,7 @@ result = run_distillation_ablation(
     limit_val_batches=LIMIT_VAL_BATCHES,
     accelerator="auto",
     precision="16-mixed",
+    seed=SEED,
 )
 
 result.update(
@@ -169,6 +183,9 @@ result.update(
         "vlm": VLM_MODEL,
         "max_steps": MAX_STEPS,
         "distill_mode": DISTILL_MODE,
+        "seed": SEED,
+        "torch": torch.__version__,
+        "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }
 )
 print("ABLATION_RESULT_JSON " + json.dumps(result), flush=True)

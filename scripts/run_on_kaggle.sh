@@ -8,6 +8,10 @@
 # Optional:
 #   MAX_STEPS                     - training steps per arm (default 2000)
 #   DISTILL_MODE                  - dense (default) | feature | logit | response
+#   ACCELERATOR                   - Kaggle accelerator (default NvidiaTeslaT4)
+#   SEED                          - seed shared by both arms (default 0)
+#   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
+#                                   names to run several arms in parallel
 #
 # Usage:
 #   KAGGLE_USERNAME=... KAGGLE_KEY=... DATASET_SLUG=owner/name ./scripts/run_on_kaggle.sh push
@@ -17,7 +21,8 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="${TIANWEN_KAGGLE_WORK:-/tmp/tianwen-kaggle}"
+KERNEL_NAME="${KERNEL_NAME:-tianwen-ablation}"
+WORK="${TIANWEN_KAGGLE_WORK:-/tmp/tianwen-kaggle/${KERNEL_NAME}}"
 SLUG_FILE="$WORK/slug.txt"
 
 write_creds() {
@@ -47,19 +52,22 @@ cmd_push() {
   sed -e "s/^MAX_STEPS = .*/MAX_STEPS = ${steps}/" \
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
+      -e "s/^SEED = .*/SEED = ${SEED:-0}/" \
       "$REPO_DIR/kaggle/run.py" > "$WORK/run.py"
-  sed -e "s#__USERNAME__#${KAGGLE_USERNAME}#" -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
+  sed -e "s#__USERNAME__/tianwen-ablation#${KAGGLE_USERNAME}/${KERNEL_NAME}#" \
+      -e "s#\"title\": \"tianwen-ablation\"#\"title\": \"${KERNEL_NAME}\"#" \
+      -e "s#__DATASET_SLUG__#${DATASET_SLUG}#" \
       "$REPO_DIR/kaggle/kernel-metadata.json" > "$WORK/kernel-metadata.json"
-  echo "${KAGGLE_USERNAME}/tianwen-ablation" > "$SLUG_FILE"
-  echo "Pushing kernel ${KAGGLE_USERNAME}/tianwen-ablation (dataset=${DATASET_SLUG}, steps=${steps})..."
-  kaggle kernels push -p "$WORK"
+  echo "${KAGGLE_USERNAME}/${KERNEL_NAME}" > "$SLUG_FILE"
+  echo "Pushing kernel ${KAGGLE_USERNAME}/${KERNEL_NAME} (dataset=${DATASET_SLUG}, steps=${steps})..."
+  kaggle kernels push -p "$WORK" --accelerator "${ACCELERATOR:-NvidiaTeslaT4}"
   echo "Pushed. Poll with: ./scripts/run_on_kaggle.sh poll"
 }
 
 cmd_poll() {
   write_creds
   local slug
-  slug="$(cat "$SLUG_FILE" 2>/dev/null || echo "${KAGGLE_USERNAME:-}/tianwen-ablation")"
+  slug="$(cat "$SLUG_FILE" 2>/dev/null || echo "${KAGGLE_USERNAME:-}/${KERNEL_NAME}")"
   local status
   status="$(kaggle kernels status "$slug" 2>&1 | tr -d '\r')"
   echo "$status"
@@ -71,7 +79,7 @@ cmd_poll() {
       # Persist into the repo so results survive ephemeral containers.
       mkdir -p "$REPO_DIR/results"
       local name
-      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('distill_mode','feature')}_{d.get('max_steps','x')}steps\")")"
+      name="$(python3 -c "import json;d=json.load(open('$WORK/out/ablation_result.json'));print(f\"{d.get('dataset','run')}_{d.get('detector','det')}_{d.get('distill_mode','feature')}_{d.get('max_steps','x')}steps_seed{d.get('seed',0)}\")")"
       cp "$WORK/out/ablation_result.json" "$REPO_DIR/results/${name}.json"
       echo "Saved to results/${name}.json (commit it to keep it)."
     else
