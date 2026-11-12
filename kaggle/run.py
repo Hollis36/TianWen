@@ -20,7 +20,7 @@ LIMIT_VAL_BATCHES = None  # cap test batches for a quick number (None = full val
 IMAGE_SIZE = 640
 BATCH_SIZE = 8
 VLM_MODEL = "openai/clip-vit-base-patch32"
-DISTILL_MODE = "dense"  # "dense" (region-level), "feature" (pooled), "logit", "response"
+DISTILL_MODE = "dense"  # "dense" (patch grid), "region" (GT-box crops), "feature" (pooled), "logit", "response"
 DETECTOR = "yolov8n"
 DISTILL_WEIGHT = 1.0  # distillation loss weight of the distilled arm
 TRAIN_FRACTION = 1.0  # <1.0 = fixed random subset of the train split (low-data regime)
