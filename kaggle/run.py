@@ -124,6 +124,8 @@ if coco:
             "batch_size": BATCH_SIZE,
             "num_workers": 2,
                 "train_fraction": TRAIN_FRACTION,
+        "n_train_images": N_TRAIN,
+        "n_val_images": N_VAL,
         }
     )
     num_classes = 80
@@ -168,6 +170,11 @@ else:
                 "train_fraction": TRAIN_FRACTION,
             }
         )
+
+# Guard against knobs being silently dropped: report the actual split sizes.
+N_TRAIN = len(datamodule.train_dataset) if hasattr(datamodule, "train_dataset") else None
+N_VAL = len(datamodule.val_dataset) if hasattr(datamodule, "val_dataset") else None
+print(f"Split sizes: train={N_TRAIN} val={N_VAL} (TRAIN_FRACTION={TRAIN_FRACTION})", flush=True)
 
 # --- Run the ablation -----------------------------------------------------
 result = run_distillation_ablation(
