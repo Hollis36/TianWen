@@ -55,7 +55,12 @@ class CLIPVLM(BaseVLM):
                 "transformers is required for CLIPVLM. Install with: pip install transformers"
             )
 
-        self.model = CLIPModel.from_pretrained(model_name)
+        # Prefer safetensors: newer transformers refuse torch.load of .bin weights
+        # unless torch>=2.6 (CVE-2025-32434); fall back if none are published.
+        try:
+            self.model = CLIPModel.from_pretrained(model_name, use_safetensors=True)
+        except Exception:
+            self.model = CLIPModel.from_pretrained(model_name)
 
         vision_config = self.model.config.vision_config
         self.vision_hidden_size = vision_config.hidden_size
