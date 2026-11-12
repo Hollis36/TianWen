@@ -105,8 +105,10 @@ def test_region_teacher_sees_one_crop_per_box(models):
     fusion = KnowledgeDistillation(detector=detector, vlm=vlm, distill_mode="region")
     images, _ = _batch()
     targets = [
-        {"boxes": torch.tensor([[10.0, 10, 60, 60], [100, 100, 140, 130]]),
-         "labels": torch.tensor([0, 1])},
+        {
+            "boxes": torch.tensor([[10.0, 10, 60, 60], [100, 100, 140, 130]]),
+            "labels": torch.tensor([0, 1]),
+        },
         {"boxes": torch.tensor([[5.0, 5, 300, 300]]), "labels": torch.tensor([2])},
     ]
     out = fusion(images, targets)

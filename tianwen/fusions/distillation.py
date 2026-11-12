@@ -364,9 +364,15 @@ class KnowledgeDistillation(BaseFusion):
         # Student: RoI-align on the neck map (feature stride from map/image size).
         scale = det_feat.shape[-1] / float(img_w)
         pooled = roi_align(
-            det_feat, rois.to(det_feat.dtype), output_size=(2, 2),
-            spatial_scale=scale, sampling_ratio=2, aligned=True,
-        ).mean(dim=(2, 3))  # [K, C]
+            det_feat,
+            rois.to(det_feat.dtype),
+            output_size=(2, 2),
+            spatial_scale=scale,
+            sampling_ratio=2,
+            aligned=True,
+        ).mean(
+            dim=(2, 3)
+        )  # [K, C]
         student = self.region_projector(pooled)
 
         # Teacher: enlarged square-ish crops, resized to the VLM input size.
@@ -376,9 +382,13 @@ class KnowledgeDistillation(BaseFusion):
             w = ((x2 - x1) * self.region_context).clamp(min=self.region_min_size)
             h = ((y2 - y1) * self.region_context).clamp(min=self.region_min_size)
             crop_boxes = torch.stack(
-                [rois[:, 0],
-                 (cx - w / 2).clamp(0, img_w), (cy - h / 2).clamp(0, img_h),
-                 (cx + w / 2).clamp(0, img_w), (cy + h / 2).clamp(0, img_h)],
+                [
+                    rois[:, 0],
+                    (cx - w / 2).clamp(0, img_w),
+                    (cy - h / 2).clamp(0, img_h),
+                    (cx + w / 2).clamp(0, img_w),
+                    (cy + h / 2).clamp(0, img_h),
+                ],
                 dim=1,
             )
             size = 224
@@ -386,8 +396,12 @@ class KnowledgeDistillation(BaseFusion):
             if callable(get_size):
                 size = int(get_size()[0])
             crops = roi_align(
-                images.float(), crop_boxes, output_size=(size, size),
-                spatial_scale=1.0, sampling_ratio=2, aligned=True,
+                images.float(),
+                crop_boxes,
+                output_size=(size, size),
+                spatial_scale=1.0,
+                sampling_ratio=2,
+                aligned=True,
             )
             tokens = self.vlm.get_visual_features(crops)
             teacher = tokens[:, 0] if tokens.dim() == 3 else tokens  # CLS embedding
