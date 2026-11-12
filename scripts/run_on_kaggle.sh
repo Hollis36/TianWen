@@ -96,7 +96,10 @@ cmd_poll() {
   status="$(kaggle kernels status "$slug" 2>&1 | tr -d '\r')"
   echo "$status"
   if echo "$status" | grep -qiE "complete"; then
-    kaggle kernels output "$slug" -p "$WORK/out" >/dev/null 2>&1 || true
+    # Only the result JSON and the run log: the SSL kernels leave thousands of
+    # split images in /kaggle/working, which otherwise take ~1 h to download.
+    kaggle kernels output "$slug" -p "$WORK/out" \
+      --file-pattern '(ablation_result\.json|\.log)$' >/dev/null 2>&1 || true
     echo "=== ablation result ==="
     if [ -f "$WORK/out/ablation_result.json" ]; then
       cat "$WORK/out/ablation_result.json"
@@ -111,7 +114,8 @@ cmd_poll() {
     fi
   elif echo "$status" | grep -qiE "error|cancel"; then
     echo "Kernel failed; fetching logs..."
-    kaggle kernels output "$slug" -p "$WORK/out" >/dev/null 2>&1 || true
+    kaggle kernels output "$slug" -p "$WORK/out" \
+      --file-pattern '(ablation_result\.json|\.log)$' >/dev/null 2>&1 || true
     ls -1 "$WORK/out" 2>/dev/null || true
   else
     echo "(still running — poll again later)"

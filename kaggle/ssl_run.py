@@ -11,6 +11,7 @@ Writes /kaggle/working/ablation_result.json.
 import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -29,8 +30,15 @@ TIANWEN_REF = "main"
 
 if not os.path.exists("TianWen"):
     subprocess.run(
-        ["git", "clone", "--depth", "1", "--branch", TIANWEN_REF,
-         "https://github.com/Hollis36/TianWen.git"],
+        [
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            TIANWEN_REF,
+            "https://github.com/Hollis36/TianWen.git",
+        ],
         check=True,
     )
 TIANWEN_COMMIT = subprocess.run(
@@ -38,8 +46,17 @@ TIANWEN_COMMIT = subprocess.run(
 ).stdout.strip()
 print("TianWen", TIANWEN_REF, TIANWEN_COMMIT, flush=True)
 
-subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", "TianWen"], check=True)
-pkgs = ["ultralytics", "pytorch-lightning", "torchmetrics", "omegaconf", "hydra-core", "pycocotools"]
+subprocess.run(
+    [sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", "TianWen"], check=True
+)
+pkgs = [
+    "ultralytics",
+    "pytorch-lightning",
+    "torchmetrics",
+    "omegaconf",
+    "hydra-core",
+    "pycocotools",
+]
 if SSL_ARM == "vfm":
     pkgs.append("rfdetr[train,loggers]")
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", *pkgs], check=True)
@@ -47,7 +64,10 @@ sys.path.insert(0, "TianWen")
 
 import torch  # noqa: E402
 
-print(f"torch {torch.__version__} | device={torch.cuda.get_device_name() if torch.cuda.is_available() else 'cpu'}", flush=True)
+print(
+    f"torch {torch.__version__} | device={torch.cuda.get_device_name() if torch.cuda.is_available() else 'cpu'}",
+    flush=True,
+)
 
 from tianwen.datasets.yolo_format import _load_data_yaml  # noqa: E402
 from tianwen.semi import build_ssl_splits, run_ssl_arm  # noqa: E402
@@ -105,3 +125,9 @@ result.update(
 print("ABLATION_RESULT_JSON " + json.dumps(result), flush=True)
 with open("/kaggle/working/ablation_result.json", "w") as f:
     json.dump(result, f, indent=2)
+
+# Drop bulky intermediates (split images, pseudo datasets, run dirs, the
+# repo clone) so `kaggle kernels output` only downloads the result + log.
+
+for leftover in ("ssl_split", "ssl_work", "TianWen", "runs"):
+    shutil.rmtree(os.path.join("/kaggle/working", leftover), ignore_errors=True)
