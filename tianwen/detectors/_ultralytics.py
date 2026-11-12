@@ -4,7 +4,7 @@ These keep the target-format conversion in one place so the YOLO and RT-DETR
 wrappers stay consistent.
 """
 
-from typing import Dict, List
+from typing import Dict, List, Mapping, Union
 
 import torch
 from torch import Tensor
@@ -62,7 +62,7 @@ def build_loss_batch(
 
 def split_loss_with_grad(
     total_loss: Tensor,
-    components: Tensor,
+    components: Union[Tensor, Mapping[str, Tensor]],
     names: List[str],
 ) -> Dict[str, Tensor]:
     """Split a scalar loss into named, differentiable components for logging.
@@ -76,12 +76,15 @@ def split_loss_with_grad(
 
     Args:
         total_loss: Differentiable scalar total loss.
-        components: Detached per-component magnitudes (e.g. ``[giou, cls, bbox]``).
+        components: Detached per-component magnitudes (e.g. ``[giou, cls, bbox]``),
+            as a tensor or an ordered mapping (newer ultralytics returns a dict).
         names: Names for each component, same length/order as ``components``.
 
     Returns:
         Dict mapping each name to a differentiable component tensor.
     """
+    if isinstance(components, Mapping):
+        components = torch.stack([torch.as_tensor(v).reshape(()) for v in components.values()])
     detached = components.detach()
     denom = detached.sum().clamp_min(1e-12)
     fractions = detached / denom
