@@ -98,3 +98,19 @@ def test_train_fraction_validated(tmp_path):
         YOLOFormatDataModule(
             val_images=str(tmp_path / "images" / "val"), class_names=["a"], train_fraction=0.0
         )
+
+
+def test_build_datamodule_forwards_train_fraction(tmp_path):
+    # Regression: build_datamodule silently dropped train_fraction.
+    _make_yolo_dataset(tmp_path)
+    dm = build_datamodule(
+        {
+            "name": "yolo",
+            "train_images": str(tmp_path / "images" / "train"),
+            "val_images": str(tmp_path / "images" / "val"),
+            "class_names": list("abc"),
+            "image_size": [64, 64],
+            "train_fraction": 0.34,
+        }
+    )
+    assert len(dm.train_dataset) == 1

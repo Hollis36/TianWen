@@ -55,6 +55,8 @@ def build_datamodule(cfg):
             image_size=tuple(cfg.get("image_size", [640, 640])),
             batch_size=cfg.get("batch_size", 8),
             num_workers=cfg.get("num_workers", 0),
+            train_fraction=cfg.get("train_fraction", 1.0),
+            subset_seed=cfg.get("subset_seed", 0),
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
