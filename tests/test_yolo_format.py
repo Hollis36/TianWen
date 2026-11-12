@@ -141,3 +141,15 @@ def test_dev_split_is_disjoint_and_fixed_across_fractions(tmp_path):
     # val loader -> dev split; test loader -> official val split
     assert len(full.val_dataloader().dataset) == 3
     assert len(full.test_dataloader().dataset) == 2
+
+
+def test_data_yaml_with_stale_absolute_path_falls_back(tmp_path):
+    # Simulates a dataset whose absolute `path` was baked in on another machine.
+    root = tmp_path / "DsPCBSD+"
+    _make_yolo_dataset(root / "Data_YOLO")
+    (root / "data.yaml").write_text(
+        "path: /some/old/mount/DsPCBSD+/Data_YOLO\n"
+        "train: images/train\nval: images/val\nnc: 3\nnames: [a, b, c]\n"
+    )
+    dm = YOLOFormatDataModule(data_yaml=str(root / "data.yaml"), image_size=(64, 64))
+    assert len(dm.train_dataset) == 3 and len(dm.val_dataset) == 3

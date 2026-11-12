@@ -115,10 +115,19 @@ def _load_data_yaml(data_yaml: str) -> Dict[str, Any]:
     with open(data_yaml) as f:
         cfg = yaml.safe_load(f)
 
+    yaml_dir = os.path.dirname(os.path.abspath(data_yaml))
     base = cfg.get("path")
     if base and not os.path.isabs(base):
-        base = os.path.join(os.path.dirname(os.path.abspath(data_yaml)), base)
-    base = base or os.path.dirname(os.path.abspath(data_yaml))
+        base = os.path.join(yaml_dir, base)
+    base = base or yaml_dir
+    if not os.path.isdir(base):
+        # Absolute ``path`` baked in on another machine (e.g. a Kaggle dataset
+        # whose mount point changed): fall back to the same leaf directory next
+        # to the YAML, then to the YAML's own directory.
+        for candidate in (os.path.join(yaml_dir, os.path.basename(base.rstrip("/"))), yaml_dir):
+            if os.path.isdir(candidate):
+                base = candidate
+                break
 
     def _resolve(entry: Optional[str]) -> Optional[str]:
         if not entry:
