@@ -24,7 +24,7 @@ from typing import Any, Dict, Optional
 import torch
 import yaml
 
-from tianwen.semi.splits import SSLSplits
+from tianwen.semi.splits import SSLSplits, _link
 
 
 def strong_augment(imgs: torch.Tensor, generator: Optional[torch.Generator] = None) -> torch.Tensor:
@@ -192,9 +192,7 @@ def _materialise_unlabeled(splits: SSLSplits, out_dir: str) -> str:
     os.makedirs(image_dir, exist_ok=True)
     os.makedirs(label_dir, exist_ok=True)
     for src in splits.unlabeled_images:
-        dst = os.path.join(image_dir, os.path.basename(src))
-        if not os.path.lexists(dst):
-            os.symlink(os.path.realpath(src), dst)
+        _link(src, os.path.join(image_dir, os.path.basename(src)))
     first = os.path.splitext(os.path.basename(sorted(splits.unlabeled_images)[0]))[0]
     with open(os.path.join(label_dir, first + ".txt"), "w") as f:
         f.write("0 0.5 0.5 0.1 0.1\n")
