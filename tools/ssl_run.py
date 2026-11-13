@@ -64,6 +64,7 @@ def main() -> None:
     p.add_argument("--work-dir", default=None, help="scratch dir (default: ./ssl_work/<run>)")
     p.add_argument("--out-dir", default=os.path.join(REPO, "results"))
     p.add_argument("--dataset-name", default=None, help="name used in the result filename")
+    p.add_argument("--platform", default="local", help="recorded in the result (e.g. modal)")
     p.add_argument("--keep-work", action="store_true", help="keep splits and run dirs")
     args = p.parse_args()
 
@@ -128,6 +129,7 @@ def main() -> None:
             "tianwen_commit": commit,
             "torch": torch.__version__,
             "gpu": gpu,
+            "platform": args.platform,
         }
     )
     os.makedirs(args.out_dir, exist_ok=True)
