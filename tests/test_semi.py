@@ -127,3 +127,39 @@ def test_supervised_arm_end_to_end_smoke(splits, tmp_path):
     assert "pseudo_mAP50" in out and out["n_pseudo_images"] == 11
     assert 0.0 <= out["labeller_test_eval_mAP50_95"] <= 1.0
     assert 0.0 <= out["student_test_eval_mAP50_95"] <= 1.0
+
+
+def test_strong_augment_keeps_shape_and_range():
+    import torch
+
+    from tianwen.semi.mean_teacher import strong_augment
+
+    x = torch.rand(3, 3, 32, 32)
+    y = strong_augment(x, generator=torch.Generator().manual_seed(0))
+    assert y.shape == x.shape and 0.0 <= float(y.min()) and float(y.max()) <= 1.0
+    assert not torch.equal(x, y)
+
+
+def test_mean_teacher_arm_end_to_end_smoke(splits, tmp_path):
+    pytest.importorskip("ultralytics")
+    from tianwen.semi.pipeline import run_ssl_arm
+
+    try:
+        out = run_ssl_arm(
+            "mean_teacher",
+            splits,
+            str(tmp_path / "work"),
+            student_epochs=2,
+            imgsz=64,
+            conf=0.001,
+            burn_in_epochs=1,
+        )
+    except Exception as exc:  # pragma: no cover - environment dependent (weights download)
+        if "download" in str(exc).lower() or "connection" in str(exc).lower():
+            pytest.skip(f"ultralytics weights unavailable: {exc}")
+        raise
+    assert out["ssl_arm"] == "mean_teacher" and 0.0 <= out["mAP50_95"] <= 1.0
+    # The unlabelled stream was actually consumed after burn-in.
+    assert out["mt_unlabeled_images_seen"] > 0
+    assert out["mt_labeled_repeat"] == 4  # ceil((4 labelled + 11 unlabelled) / 4)
+    assert 0.0 <= out["student_test_eval_mAP50_95"] <= 1.0
