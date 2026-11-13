@@ -44,9 +44,21 @@ class CLIPVLM(BaseVLM):
         device: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
         freeze: bool = True,
+        random_init: bool = False,
+        init_seed: int = 0,
         **kwargs,
     ):
+        """
+        Args:
+            random_init: Build the same architecture with randomly initialised
+                weights instead of the pretrained ones. This is the "random
+                teacher" control: it separates what distillation gains from the
+                teacher's *knowledge* from what it gains as a regulariser.
+            init_seed: Seed for the random initialisation (independent of, and
+                without consuming, the global RNG stream).
+        """
         super().__init__(model_name=model_name, device=device, dtype=dtype, freeze=freeze)
+        self.random_init = random_init
 
         try:
             from transformers import CLIPModel
@@ -57,10 +69,18 @@ class CLIPVLM(BaseVLM):
 
         # Prefer safetensors: newer transformers refuse torch.load of .bin weights
         # unless torch>=2.6 (CVE-2025-32434); fall back if none are published.
-        try:
-            self.model = CLIPModel.from_pretrained(model_name, use_safetensors=True)
-        except Exception:
-            self.model = CLIPModel.from_pretrained(model_name)
+        if random_init:
+            from transformers import CLIPConfig
+
+            config = CLIPConfig.from_pretrained(model_name)
+            with torch.random.fork_rng(devices=[]):
+                torch.manual_seed(init_seed)
+                self.model = CLIPModel(config)
+        else:
+            try:
+                self.model = CLIPModel.from_pretrained(model_name, use_safetensors=True)
+            except Exception:
+                self.model = CLIPModel.from_pretrained(model_name)
 
         vision_config = self.model.config.vision_config
         self.vision_hidden_size = vision_config.hidden_size

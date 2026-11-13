@@ -4,12 +4,24 @@ import json
 import sys
 
 d = json.load(open(sys.argv[1]))
+if d.get("experiment") == "ssl":
+    print(
+        f"{d.get('dataset', 'run')}_ssl_{d['ssl_arm']}_frac{d.get('train_fraction')}"
+        f"_ep{d.get('student_epochs')}"
+        + (f"_split{d['split_seed']}" if d.get("split_seed") else "")
+        + f"_seed{d.get('seed', 0)}"
+    )
+    sys.exit(0)
 parts = [
     d.get("dataset", "run"),
     d.get("detector", "det"),
     d.get("distill_mode", "feature"),
-    f"{d.get('max_steps', 'x')}steps",
+    f"ep{d['max_epochs']}" if d.get("max_epochs") else f"{d.get('max_steps', 'x')}steps",
 ]
+if d.get("arms"):
+    parts.append("arms-" + "-".join(d["arms"]))
+if d.get("max_epochs") and d.get("patience") == 0:
+    parts.append("noES")  # fixed-length training, best dev epoch selected
 if d.get("distill_weight", 1.0) != 1.0:
     parts.append(f"w{d['distill_weight']}")
 if d.get("train_fraction", 1.0) != 1.0:

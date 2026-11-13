@@ -114,3 +114,42 @@ def test_build_datamodule_forwards_train_fraction(tmp_path):
         }
     )
     assert len(dm.train_dataset) == 1
+
+
+def test_dev_split_is_disjoint_and_fixed_across_fractions(tmp_path):
+    root = tmp_path
+    for split, n in (("train", 10), ("val", 2)):
+        (root / "images" / split).mkdir(parents=True)
+        (root / "labels" / split).mkdir(parents=True)
+        for i in range(n):
+            arr = (np.random.rand(64, 64, 3) * 255).astype("uint8")
+            Image.fromarray(arr).save(root / "images" / split / f"im{i}.jpg")
+            (root / "labels" / split / f"im{i}.txt").write_text("0 0.5 0.5 0.2 0.2\n")
+    kw = dict(
+        train_images=str(root / "images" / "train"),
+        val_images=str(root / "images" / "val"),
+        class_names=["a"],
+        image_size=(64, 64),
+        dev_size=3,
+    )
+    full = YOLOFormatDataModule(train_fraction=1.0, **kw)
+    small = YOLOFormatDataModule(train_fraction=0.3, **kw)
+    assert len(full.dev_dataset) == 3 and len(full.train_dataset) == 7
+    assert len(small.train_dataset) == 3
+    assert full.dev_dataset.indices == small.dev_dataset.indices
+    assert not set(small.train_dataset.indices) & set(small.dev_dataset.indices)
+    # val loader -> dev split; test loader -> official val split
+    assert len(full.val_dataloader().dataset) == 3
+    assert len(full.test_dataloader().dataset) == 2
+
+
+def test_data_yaml_with_stale_absolute_path_falls_back(tmp_path):
+    # Simulates a dataset whose absolute `path` was baked in on another machine.
+    root = tmp_path / "DsPCBSD+"
+    _make_yolo_dataset(root / "Data_YOLO")
+    (root / "data.yaml").write_text(
+        "path: /some/old/mount/DsPCBSD+/Data_YOLO\n"
+        "train: images/train\nval: images/val\nnc: 3\nnames: [a, b, c]\n"
+    )
+    dm = YOLOFormatDataModule(data_yaml=str(root / "data.yaml"), image_size=(64, 64))
+    assert len(dm.train_dataset) == 3 and len(dm.val_dataset) == 3

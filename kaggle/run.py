@@ -26,6 +26,11 @@ DISTILL_WEIGHT = 1.0  # distillation loss weight of the distilled arm
 TRAIN_FRACTION = 1.0  # <1.0 = fixed random subset of the train split (low-data regime)
 TIANWEN_REF = "main"  # branch/tag of TianWen to clone
 SEED = 0  # same seed for both arms; repeat with several seeds for error bars
+# Converged, multi-arm protocol (used when MAX_EPOCHS is set; MAX_STEPS is then ignored):
+MAX_EPOCHS = None  # e.g. 60: epoch-based training, so every data fraction gets equal passes
+PATIENCE = 10  # early stopping on dev mAP@50:95 (epochs)
+DEV_SIZE = 0  # held-out dev images carved from train for early stopping / model selection
+ARMS = "baseline,clip,random"  # baseline (no teacher), clip (pretrained), random (random-init CLIP)
 
 # --- Set up TianWen -------------------------------------------------------
 # Use Kaggle's preinstalled torch (Python 3.13 images ship torch>=2.6, which also
@@ -124,6 +129,7 @@ if coco:
             "batch_size": BATCH_SIZE,
             "num_workers": 2,
                 "train_fraction": TRAIN_FRACTION,
+                "dev_size": DEV_SIZE,
         }
     )
     num_classes = 80
@@ -141,6 +147,7 @@ else:
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
                 "train_fraction": TRAIN_FRACTION,
+                "dev_size": DEV_SIZE,
             }
         )
         num_classes = datamodule.num_classes
@@ -166,32 +173,63 @@ else:
                 "batch_size": BATCH_SIZE,
                 "num_workers": 2,
                 "train_fraction": TRAIN_FRACTION,
+                "dev_size": DEV_SIZE,
             }
         )
 
 # Guard against knobs being silently dropped: report the actual split sizes.
 N_TRAIN = len(datamodule.train_dataset) if hasattr(datamodule, "train_dataset") else None
 N_VAL = len(datamodule.val_dataset) if hasattr(datamodule, "val_dataset") else None
-print(f"Split sizes: train={N_TRAIN} val={N_VAL} (TRAIN_FRACTION={TRAIN_FRACTION})", flush=True)
+_dev = getattr(datamodule, "dev_dataset", None)
+N_DEV = len(_dev) if _dev is not None else 0
+print(
+    f"Split sizes: train={N_TRAIN} dev={N_DEV} test(val)={N_VAL} "
+    f"(TRAIN_FRACTION={TRAIN_FRACTION})",
+    flush=True,
+)
 
 # --- Run the ablation -----------------------------------------------------
-result = run_distillation_ablation(
-    detector_cfg={
-        "type": "yolov8",
-        "model_name": DETECTOR,
-        "num_classes": num_classes,
-        "pretrained": True,
-    },
-    vlm_cfg={"type": "clip", "model_name": VLM_MODEL},
-    datamodule=datamodule,
-    distill_mode=DISTILL_MODE,
-    max_steps=MAX_STEPS,
-    limit_val_batches=LIMIT_VAL_BATCHES,
-    accelerator="auto",
-    precision="16-mixed",
-    seed=SEED,
-    distill_weight=DISTILL_WEIGHT,
-)
+DETECTOR_CFG = {
+    "type": "yolov8",
+    "model_name": DETECTOR,
+    "num_classes": num_classes,
+    "pretrained": True,
+}
+if MAX_EPOCHS:
+    from tianwen.utils.ablation import run_teacher_ablation  # noqa: E402
+
+    _arm_defs = {
+        "baseline": {"vlm_cfg": {"type": "clip", "model_name": VLM_MODEL}, "distill_weight": 0.0},
+        "clip": {"vlm_cfg": {"type": "clip", "model_name": VLM_MODEL}, "distill_weight": DISTILL_WEIGHT},
+        "random": {
+            "vlm_cfg": {"type": "clip", "model_name": VLM_MODEL, "random_init": True},
+            "distill_weight": DISTILL_WEIGHT,
+        },
+    }
+    result = run_teacher_ablation(
+        detector_cfg=DETECTOR_CFG,
+        arms={a: _arm_defs[a] for a in ARMS.split(",")},
+        datamodule=datamodule,
+        distill_mode=DISTILL_MODE,
+        max_epochs=MAX_EPOCHS,
+        patience=PATIENCE,
+        accelerator="auto",
+        precision="16-mixed",
+        seed=SEED,
+    )
+else:
+    result = run_distillation_ablation(
+        detector_cfg=DETECTOR_CFG,
+        vlm_cfg={"type": "clip", "model_name": VLM_MODEL},
+        datamodule=datamodule,
+        distill_mode=DISTILL_MODE,
+        max_steps=MAX_STEPS,
+        limit_val_batches=LIMIT_VAL_BATCHES,
+        accelerator="auto",
+        precision="16-mixed",
+        seed=SEED,
+        distill_weight=DISTILL_WEIGHT,
+    )
 
 result.update(
     {
@@ -207,6 +245,9 @@ result.update(
         "train_fraction": TRAIN_FRACTION,
         "n_train_images": N_TRAIN,
         "n_val_images": N_VAL,
+        "n_dev_images": N_DEV,
+        "max_epochs": MAX_EPOCHS,
+        "patience": PATIENCE if MAX_EPOCHS else None,
         "torch": torch.__version__,
         "gpu": torch.cuda.get_device_name() if torch.cuda.is_available() else "cpu",
     }

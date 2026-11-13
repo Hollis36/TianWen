@@ -1,0 +1,23 @@
+{
+  "ssl_arm": "supervised",
+  "n_labeled": 821,
+  "n_unlabeled": 6887,
+  "n_dev": 500,
+  "n_test": 2051,
+  "conf": 0.5,
+  "student_seconds": 426.6,
+  "mAP50": 0.6595654547377685,
+  "mAP50_95": 0.3524087789293941,
+  "experiment": "ssl",
+  "dataset": "DsPCBSD+",
+  "num_classes": 9,
+  "detector": "yolov8n",
+  "train_fraction": 0.1,
+  "seed": 0,
+  "student_epochs": 60,
+  "labeller_epochs": 60,
+  "imgsz": 320,
+  "tianwen_commit": "cadb6d33f35335e65d4463cd18506dc53668ee5d",
+  "torch": "2.11.0+cu130",
+  "gpu": "Tesla T4"
+}

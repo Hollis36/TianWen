@@ -130,7 +130,34 @@ See the [project page](https://hollis36.github.io/tianwen-project-page/#architec
 
 ## 📊 Benchmarks
 
-> **Current finding: the VLM teacher helps when labels are scarce, not when they are plentiful.** On DsPCBSD+ with 10% of the training images, dense CLIP distillation improves YOLOv8n by **+0.0153 ± 0.0027 mAP@50:95 (3/3 seeds, ≈ +8% relative)**; with 100% of the data the effect is −0.0000 ± 0.0107. We publish every number — including ones that look bad or turn out to be invalid — with the exact configs and seeds that produced them (raw outputs in [`results/`](results/); `python scripts/summarize_results.py` regenerates the summary).
+> **Current finding: pseudo-labels from a foundation-model detector work; CLIP feature distillation does not.** On DsPCBSD+ with 10% of the labels, a YOLOv8n student trained on pseudo-labels from an RF-DETR (DINOv2 backbone) labeller gains **+0.074 ± 0.003 mAP@50:95 over supervised-only (3/3 seeds, ≈ +21% relative)**, versus +0.047 ± 0.005 with a YOLOv8m labeller. Dense CLIP feature distillation gives −0.004 ± 0.003 (0/3 seeds) once the baseline is trained to convergence — the +0.015 we reported earlier was an under-training artifact. We publish every number — including ones that look bad or turn out to be invalid — with the exact configs and seeds that produced them (raw outputs in [`results/`](results/); `python scripts/summarize_results.py` regenerates the summary).
+
+### Pseudo-labelling with a foundation-model labeller (10% labels)
+
+A labeller is trained on the 821 labelled images, pseudo-labels the other 6,887
+training images (confidence ≥ 0.5), and a YOLOv8n student is trained on labelled +
+pseudo-labelled data with the Ultralytics recipe (60 epochs, imgsz 320, checkpoint
+chosen on a 500-image dev split, tested on the official val split, 2,051 images).
+Pseudo-label quality is measured against the pool's hidden ground truth. Reproduce
+with `SCRIPT=ssl SSL_ARM=<arm> ./scripts/run_on_kaggle.sh push`.
+
+| Arm | Labeller | Pseudo-label mAP@50:95 | Precision / recall @0.5 | Student mAP@50:95 (seeds 0/1/2) | Δ vs supervised |
+|---|---|---|---|---|---|
+| supervised | — | — | — | 0.352 / 0.359 / 0.353 | — |
+| self | YOLOv8n | 0.331 | 0.79 / 0.52 | 0.384 (seed 0 only) | +0.032 |
+| yolo_large | YOLOv8m | 0.36 | 0.79 / 0.60 | 0.398 / 0.403 / 0.406 | **+0.047 ± 0.005** (3/3) |
+| **vfm** | RF-DETR-base (DINOv2) | **0.40** | 0.77 / **0.68** | **0.430 / 0.432 / 0.426** | **+0.074 ± 0.003** (3/3) |
+
+- The labellers differ in **recall**, not precision: RF-DETR leaves ~200 pool
+  images without any box, YOLOv8m 750–900, YOLOv8n 1,444.
+- With one shared evaluator on the test split (seed 2), the YOLOv8n student
+  **matches its RF-DETR labeller** (0.400 vs 0.400) and **beats its YOLOv8m
+  labeller** (0.382 vs 0.363) — at a fraction of the inference cost.
+- Caveats: one dataset, one label fraction, and the three seeds share the same
+  10% labelled subset (they vary training randomness only). Label-subset
+  resampling, a label-fraction curve and a second dataset are next.
+
+### Feature distillation from a VLM teacher (negative result)
 
 The headline question is whether the VLM teacher actually improves the detector. That's a **controlled ablation** — the same detector, data, and seed, trained with the teacher off (baseline) vs on (distilled):
 
@@ -165,7 +192,7 @@ mean Δ > 0.006 (baseline seed-to-seed spread) and ≥ 2/3 of seeds positive.
 
 | Train data | Fusion | Teacher | Weight | Seeds | Δ mAP@50:95 | Verdict |
 |---|---|---|---|---|---|---|
-| **10% (821 imgs)** | dense | CLIP-B/32 | 1.0 | 3 | **+0.0153 ± 0.0027** (+0.0127 / +0.0181 / +0.0150) | ✅ **effective** |
+| 10% (821 imgs) | dense | CLIP-B/32 | 1.0 | 5 | +0.0139 ± 0.0029 (5/5 positive) | ⚠️ artifact — see below |
 | 100% | dense | CLIP-B/32 | 1.0 | 3 | −0.0000 ± 0.0107 | no effect |
 | 100% | dense | CLIP-B/32 | 0.1 | 3 | −0.0030 ± 0.0059 | no effect |
 | 100% | dense | CLIP-B/32 | 0.3 | 1 | +0.0031 | — |
@@ -173,8 +200,18 @@ mean Δ > 0.006 (baseline seed-to-seed spread) and ≥ 2/3 of seeds positive.
 | 100% | region (GT-box crops, ViLD-style) | CLIP-B/32 | 1.0 | 3 | −0.0083 ± 0.0061 (0/3 positive) | harmful |
 | 100% | feature (pooled) | CLIP-B/32 | 1.0 | 1 | −0.0061 | — |
 
-10% baseline mAP@50:95 is 0.19 vs 0.31 with full data. More 10% seeds and a
-data-fraction curve (5 / 25 / 50%) are running.
+**The 10% gain does not survive a converged baseline.** At 2000 fixed steps the 10%
+baseline is under-trained (0.19 mAP@50:95), and distillation — from *any* teacher —
+acts as a regulariser. Re-run with epoch-based training, a 500-image dev split for
+checkpoint selection, the official val split as test, and a randomly initialised
+CLIP as a control teacher (`run_teacher_ablation`):
+
+| Protocol (10% data, 3 seeds) | CLIP teacher Δ | Random-init teacher Δ |
+|---|---|---|
+| 60 epochs, early stopping (patience 10) | −0.0008 ± 0.0074 (1/3) | +0.0006 ± 0.0072 (2/3) |
+| 60 epochs, no early stopping, best-dev epoch | **−0.0036 ± 0.0030 (0/3)** | −0.0007 ± 0.0079 (2/3) |
+
+A pretrained CLIP teacher is indistinguishable from a random one, and neither helps.
 
 **Teacher-quality diagnostic** (linear probe, 9-way defect classification on 3000/1500
 GT-box crops): majority 0.225 · raw 32×32 pixels 0.549 · COCO-pretrained YOLOv8n P3
@@ -182,12 +219,12 @@ RoI features 0.619 · **CLIP-B/32 crop embedding 0.731** · CLIP-B/32 zero-shot 
 class descriptions 0.187. CLIP's *visual* features carry defect information the
 untrained student lacks, but CLIP does not know the defect *names*.
 
-**Interpretation.** The teacher's knowledge is useful only while the student is
-data-starved; with 16k labelled boxes the student already exceeds it, and forcing
-its localization features toward CLIP's global semantics becomes interference — the
-strongest transfer (region-crop distillation) is the only one that hurts on every
-seed. Resolution is not the bottleneck: images are 226×226 and a 24×24-grid teacher
-(CLIP-L/14-336) does not help either.
+**Interpretation.** CLIP's visual features do carry defect information, but
+aligning a detector's features to them does not turn into detection accuracy at any
+label budget we tested, and the strongest transfer (region-crop distillation) hurts
+on every seed. Resolution is not the bottleneck: images are 226×226 and a
+24×24-grid teacher (CLIP-L/14-336) does not help either. Transferring a foundation
+model's knowledge as *pseudo-labels* instead (table above) is what works.
 
 For a **more publishable angle than COCO**, run the same ablation on industrial
 defect detection (NEU-DET / GC10-DET / PCB) via the generic YOLO-format loader —

@@ -36,6 +36,31 @@ def _infer_label_dir(image_dir: str) -> str:
     return os.path.join(os.path.dirname(image_dir.rstrip("/")), "labels")
 
 
+def split_indices(
+    n_images: int, train_fraction: float = 1.0, dev_size: int = 0, seed: int = 0
+) -> Tuple[List[int], List[int], List[int]]:
+    """Deterministic ``(train, dev, rest)`` index split of a training set.
+
+    The dev images (the first ``dev_size`` of a seeded permutation) are the same
+    for every ``train_fraction``; the training subset is the next
+    ``round(n_images * train_fraction)`` images and ``rest`` is everything left
+    (the "unlabeled" pool in semi-supervised experiments). Shared by
+    :class:`YOLOFormatDataModule` and :mod:`tianwen.semi` so distillation and
+    pseudo-labelling experiments use exactly the same labelled images.
+    """
+    import torch
+
+    if not 0.0 < train_fraction <= 1.0:
+        raise ValueError(f"train_fraction must be in (0, 1], got {train_fraction}")
+    gen = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(n_images, generator=gen).tolist()
+    dev, pool = perm[:dev_size], perm[dev_size:]
+    if not pool:
+        raise ValueError(f"dev_size={dev_size} leaves no training images.")
+    n = max(1, min(len(pool), round(n_images * train_fraction)))
+    return sorted(pool[:n]), sorted(dev), sorted(pool[n:])
+
+
 class YOLOFormatDataset(BaseDataset):
     """Detection dataset reading Ultralytics-style YOLO ``.txt`` labels."""
 
@@ -115,10 +140,19 @@ def _load_data_yaml(data_yaml: str) -> Dict[str, Any]:
     with open(data_yaml) as f:
         cfg = yaml.safe_load(f)
 
+    yaml_dir = os.path.dirname(os.path.abspath(data_yaml))
     base = cfg.get("path")
     if base and not os.path.isabs(base):
-        base = os.path.join(os.path.dirname(os.path.abspath(data_yaml)), base)
-    base = base or os.path.dirname(os.path.abspath(data_yaml))
+        base = os.path.join(yaml_dir, base)
+    base = base or yaml_dir
+    if not os.path.isdir(base):
+        # Absolute ``path`` baked in on another machine (e.g. a Kaggle dataset
+        # whose mount point changed): fall back to the same leaf directory next
+        # to the YAML, then to the YAML's own directory.
+        for candidate in (os.path.join(yaml_dir, os.path.basename(base.rstrip("/"))), yaml_dir):
+            if os.path.isdir(candidate):
+                base = candidate
+                break
 
     def _resolve(entry: Optional[str]) -> Optional[str]:
         if not entry:
@@ -154,6 +188,7 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         num_workers: int = 0,
         train_fraction: float = 1.0,
         subset_seed: int = 0,
+        dev_size: int = 0,
         **kwargs,
     ):
         super().__init__()
@@ -183,19 +218,23 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
             if train_images
             else self.val_dataset
         )
-        if train_fraction < 1.0:
-            # Low-data regime: a fixed random subset of the training split. The
-            # subset depends only on ``subset_seed``, so every training seed and
-            # both ablation arms see exactly the same images.
-            import torch
+        # Optional held-out dev split (for early stopping / model selection) carved
+        # from the training images, so the official validation split stays a clean
+        # test set. The dev images are fixed by ``subset_seed`` and are the same
+        # for every ``train_fraction``; the training subset is drawn from the rest.
+        self.dev_dataset = None
+        if dev_size > 0 or train_fraction < 1.0:
             from torch.utils.data import Subset
 
             full = self.train_dataset
-            n = max(1, round(len(full) * train_fraction))
-            gen = torch.Generator().manual_seed(subset_seed)
-            idx = torch.randperm(len(full), generator=gen)[:n].tolist()
-            self.train_dataset = Subset(full, sorted(idx))
+            if full is self.val_dataset and dev_size > 0:
+                raise ValueError("dev_size needs a separate training split.")
+            train_idx, dev_idx, _ = split_indices(len(full), train_fraction, dev_size, subset_seed)
+            self.train_dataset = Subset(full, train_idx)
             self.train_dataset.collate_fn = full.collate_fn
+            if dev_idx:
+                self.dev_dataset = Subset(full, dev_idx)
+                self.dev_dataset.collate_fn = full.collate_fn
 
     def _loader(self, dataset, shuffle: bool):
         from torch.utils.data import DataLoader
@@ -212,7 +251,9 @@ class YOLOFormatDataModule(pl.LightningDataModule if pl else object):
         return self._loader(self.train_dataset, shuffle=True)
 
     def val_dataloader(self):
-        return self._loader(self.val_dataset, shuffle=False)
+        # With a dev split, validation (early stopping) never sees the test split.
+        dataset = self.dev_dataset if self.dev_dataset is not None else self.val_dataset
+        return self._loader(dataset, shuffle=False)
 
     def test_dataloader(self):
         return self._loader(self.val_dataset, shuffle=False)

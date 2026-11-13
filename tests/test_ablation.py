@@ -59,3 +59,53 @@ def test_ablation_returns_baseline_distilled_and_delta():
     assert result["delta_mAP50_95"] == pytest.approx(
         result["distilled_mAP50_95"] - result["baseline_mAP50_95"]
     )
+
+
+def test_teacher_ablation_three_arms_with_early_stopping():
+    from tianwen.utils.ablation import run_teacher_ablation
+
+    dm = build_datamodule(
+        {
+            "name": "dummy",
+            "num_classes": 5,
+            "image_size": [320, 320],
+            "batch_size": 2,
+            "train_samples": 4,
+            "val_samples": 2,
+        }
+    )
+    tiny = "hf-internal-testing/tiny-random-CLIPModel"
+    arms = {
+        "baseline": {"vlm_cfg": {"type": "clip", "model_name": tiny}, "distill_weight": 0.0},
+        "clip": {"vlm_cfg": {"type": "clip", "model_name": tiny}, "distill_weight": 1.0},
+        "random": {
+            "vlm_cfg": {"type": "clip", "model_name": tiny, "random_init": True},
+            "distill_weight": 1.0,
+        },
+    }
+    try:
+        result = run_teacher_ablation(
+            detector_cfg={
+                "type": "yolov8",
+                "model_name": "yolov8n",
+                "num_classes": 5,
+                "input_size": (320, 320),
+                "pretrained": True,
+            },
+            arms=arms,
+            datamodule=dm,
+            max_epochs=2,
+            patience=1,
+            accelerator="cpu",
+        )
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Could not run ablation (weights/deps unavailable): {exc}")
+
+    assert set(result["arms"]) == {"baseline", "clip", "random"}
+    for res in result["arms"].values():
+        assert 0 <= res["best_epoch"] <= 1
+        assert res["dev_mAP50_95"] >= 0.0
+    for name in ("clip", "random"):
+        assert result[f"delta_{name}_mAP50_95"] == pytest.approx(
+            result["arms"][name]["mAP50_95"] - result["arms"]["baseline"]["mAP50_95"]
+        )

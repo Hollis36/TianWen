@@ -23,12 +23,44 @@ def main() -> None:
     args = ap.parse_args()
 
     groups = defaultdict(list)
+    ssl = defaultdict(dict)
     for path in sorted(glob.glob(os.path.join(args.results_dir, "*_seed*.json"))):
         d = json.load(open(path))
         if d.get("valid") is False:
             continue
         key = re.sub(r"_seed\d+$", "", os.path.splitext(os.path.basename(path))[0])
+        if d.get("experiment") == "ssl":
+            pair = (d["dataset"], d["train_fraction"], d["student_epochs"], d["seed"])
+            ssl[pair + (d.get("split_seed", 0),)][d["ssl_arm"]] = d
+            continue
+        if "arms" in d:
+            # Multi-arm result: one row per non-baseline arm, delta vs baseline.
+            for arm in d["arms"]:
+                if arm == "baseline":
+                    continue
+                groups[f"{key} [{arm}]"].append(
+                    {
+                        "delta_mAP50_95": d[f"delta_{arm}_mAP50_95"],
+                        "delta_mAP50": d[f"delta_{arm}_mAP50"],
+                    }
+                )
+            continue
         groups[key].append(d)
+
+    # Pseudo-label arms: paired (same training seed and label subset) delta vs the supervised arm.
+    for (ds, frac, ep, _seed, _split), arms in ssl.items():
+        base = arms.get("supervised")
+        if base is None:
+            continue
+        for arm, d in arms.items():
+            if arm == "supervised":
+                continue
+            groups[f"{ds}_ssl_frac{frac}_ep{ep} [{arm} vs supervised]"].append(
+                {
+                    "delta_mAP50_95": d["mAP50_95"] - base["mAP50_95"],
+                    "delta_mAP50": d["mAP50"] - base["mAP50"],
+                }
+            )
 
     print(f"{'config':<58} {'n':>2}  {'Δ mAP50:95 mean ± std':>24}  {'Δ mAP50 mean':>12}  seeds(+)  verdict")
     for key, runs in sorted(groups.items()):
