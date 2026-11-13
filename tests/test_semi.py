@@ -127,3 +127,108 @@ def test_supervised_arm_end_to_end_smoke(splits, tmp_path):
     assert "pseudo_mAP50" in out and out["n_pseudo_images"] == 11
     assert 0.0 <= out["labeller_test_eval_mAP50_95"] <= 1.0
     assert 0.0 <= out["student_test_eval_mAP50_95"] <= 1.0
+
+
+def test_strong_augment_keeps_shape_and_range():
+    import torch
+
+    from tianwen.semi.mean_teacher import strong_augment
+
+    x = torch.rand(3, 3, 32, 32)
+    y = strong_augment(x, generator=torch.Generator().manual_seed(0))
+    assert y.shape == x.shape and 0.0 <= float(y.min()) and float(y.max()) <= 1.0
+    assert not torch.equal(x, y)
+
+
+def test_mean_teacher_arm_end_to_end_smoke(splits, tmp_path):
+    pytest.importorskip("ultralytics")
+    from tianwen.semi.pipeline import run_ssl_arm
+
+    try:
+        out = run_ssl_arm(
+            "mean_teacher",
+            splits,
+            str(tmp_path / "work"),
+            student_epochs=2,
+            imgsz=64,
+            conf=0.001,
+            burn_in_epochs=1,
+        )
+    except Exception as exc:  # pragma: no cover - environment dependent (weights download)
+        if "download" in str(exc).lower() or "connection" in str(exc).lower():
+            pytest.skip(f"ultralytics weights unavailable: {exc}")
+        raise
+    assert out["ssl_arm"] == "mean_teacher" and 0.0 <= out["mAP50_95"] <= 1.0
+    # The unlabelled stream was actually consumed after burn-in.
+    assert out["mt_unlabeled_images_seen"] > 0
+    assert out["mt_labeled_repeat"] == 4  # ceil((4 labelled + 11 unlabelled) / 4)
+    assert 0.0 <= out["student_test_eval_mAP50_95"] <= 1.0
+
+
+def test_splits_and_pseudo_dataset_without_symlinks(tmp_path, monkeypatch):
+    """Windows without symlink rights: fall back to hard links / copies."""
+
+    def no_symlink(*args, **kwargs):
+        raise OSError("symlink privilege not held")
+
+    monkeypatch.setattr(os, "symlink", no_symlink)
+    root = _make(tmp_path / "data")
+    splits = build_ssl_splits(
+        str(root / "images" / "train"),
+        str(root / "images" / "val"),
+        ["a", "b", "c"],
+        str(tmp_path / "ssl"),
+        labeled_fraction=0.2,
+        dev_size=5,
+        seed=0,
+    )
+    labeled = os.listdir(os.path.join(splits.root, "labeled", "images"))
+    assert len(labeled) == 4
+    assert not os.path.islink(os.path.join(splits.root, "labeled", "images", labeled[0]))
+    stats = write_pseudo_dataset(splits, {}, 0.5, str(tmp_path / "pseudo"))
+    assert stats["n_pseudo_images"] == 11
+    assert len(os.listdir(tmp_path / "pseudo" / "train" / "images")) == 4 + 11
+    # dev/test are real directories mirroring the split.
+    assert len(os.listdir(tmp_path / "pseudo" / "dev" / "images")) == 5
+    assert len(os.listdir(tmp_path / "pseudo" / "test" / "labels")) == 4
+
+
+def test_ssl_run_cli_supervised_smoke(tmp_path):
+    pytest.importorskip("ultralytics")
+    import json
+    import subprocess
+    import sys
+
+    root = _make(tmp_path / "data")
+    (root / "data.yaml").write_text(
+        f"path: {root}\ntrain: images/train\nval: images/val\nnames: [a, b, c]\n"
+    )
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cmd = [
+        sys.executable,
+        os.path.join(repo, "tools", "ssl_run.py"),
+        "--data",
+        str(root),
+        "--arm",
+        "supervised",
+        "--fraction",
+        "0.2",
+        "--dev-size",
+        "5",
+        "--student-epochs",
+        "1",
+        "--imgsz",
+        "64",
+        "--work-dir",
+        str(tmp_path / "work"),
+        "--out-dir",
+        str(tmp_path / "out"),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(tmp_path))
+    if proc.returncode != 0 and "download" in (proc.stderr + proc.stdout).lower():
+        pytest.skip("ultralytics weights unavailable")
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    out = json.load(open(tmp_path / "out" / "data_ssl_supervised_frac0.2_ep1_seed0.json"))
+    assert out["experiment"] == "ssl" and out["ssl_arm"] == "supervised"
+    assert out["n_labeled"] == 4 and 0.0 <= out["mAP50_95"] <= 1.0
+    assert not os.path.exists(tmp_path / "work")  # scratch cleaned up
