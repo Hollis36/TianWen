@@ -30,7 +30,8 @@ def main() -> None:
             continue
         key = re.sub(r"_seed\d+$", "", os.path.splitext(os.path.basename(path))[0])
         if d.get("experiment") == "ssl":
-            ssl[(d["dataset"], d["train_fraction"], d["student_epochs"], d["seed"])][d["ssl_arm"]] = d
+            pair = (d["dataset"], d["train_fraction"], d["student_epochs"], d["seed"])
+            ssl[pair + (d.get("split_seed", 0),)][d["ssl_arm"]] = d
             continue
         if "arms" in d:
             # Multi-arm result: one row per non-baseline arm, delta vs baseline.
@@ -46,8 +47,8 @@ def main() -> None:
             continue
         groups[key].append(d)
 
-    # Pseudo-label arms: paired (same seed) delta vs the supervised arm.
-    for (ds, frac, ep, _seed), arms in ssl.items():
+    # Pseudo-label arms: paired (same training seed and label subset) delta vs the supervised arm.
+    for (ds, frac, ep, _seed, _split), arms in ssl.items():
         base = arms.get("supervised")
         if base is None:
             continue

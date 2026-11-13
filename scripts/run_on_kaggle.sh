@@ -18,6 +18,7 @@
 #   SSL_ARM / STUDENT_EPOCHS / LABELLER_EPOCHS / IMGSZ / CONF - pseudo-label arm settings
 #   TIANWEN_REF                   - TianWen branch/tag the kernel clones (default main)
 #   SEED                          - seed shared by both arms (default 0)
+#   SPLIT_SEED                    - SSL only: which labelled subset is drawn (default 0)
 #   KERNEL_NAME                   - kernel slug (default tianwen-ablation); use distinct
 #                                   names to run several arms in parallel
 #
@@ -63,6 +64,7 @@ cmd_push() {
       -e "s/^LIMIT_VAL_BATCHES = .*/LIMIT_VAL_BATCHES = ${limit_val}/" \
       -e "s/^DISTILL_MODE = .*/DISTILL_MODE = \"${mode}\"/" \
       -e "s/^SEED = .*/SEED = ${SEED:-0}/" \
+      -e "s/^SPLIT_SEED = .*/SPLIT_SEED = ${SPLIT_SEED:-0}/" \
       -e "s/^MAX_EPOCHS = .*/MAX_EPOCHS = ${MAX_EPOCHS:-None}/" \
       -e "s/^PATIENCE = .*/PATIENCE = ${PATIENCE:-10}/" \
       -e "s/^DEV_SIZE = .*/DEV_SIZE = ${DEV_SIZE:-0}/" \

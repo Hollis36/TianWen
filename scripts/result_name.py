@@ -7,7 +7,9 @@ d = json.load(open(sys.argv[1]))
 if d.get("experiment") == "ssl":
     print(
         f"{d.get('dataset', 'run')}_ssl_{d['ssl_arm']}_frac{d.get('train_fraction')}"
-        f"_ep{d.get('student_epochs')}_seed{d.get('seed', 0)}"
+        f"_ep{d.get('student_epochs')}"
+        + (f"_split{d['split_seed']}" if d.get("split_seed") else "")
+        + f"_seed{d.get('seed', 0)}"
     )
     sys.exit(0)
 parts = [

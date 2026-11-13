@@ -20,6 +20,7 @@ SSL_ARM = "supervised"
 LABELED_FRACTION = 0.1
 DEV_SIZE = 500
 SEED = 0
+SPLIT_SEED = 0  # which labelled/dev subset is drawn (independent of the training seed)
 STUDENT_EPOCHS = 60
 LABELLER_EPOCHS = 60
 IMGSZ = 320  # DsPCBSD+ images are 226x226
@@ -86,7 +87,7 @@ splits = build_ssl_splits(
     "/kaggle/working/ssl_split",
     labeled_fraction=LABELED_FRACTION,
     dev_size=DEV_SIZE,
-    seed=0,  # the labelled/dev split is fixed across training seeds
+    seed=SPLIT_SEED,  # the labelled/dev split is independent of the training seed
 )
 print(
     f"Split: labeled={splits.n_labeled} unlabeled={len(splits.unlabeled_images)} "
@@ -114,6 +115,7 @@ result.update(
         "detector": "yolov8n",
         "train_fraction": LABELED_FRACTION,
         "seed": SEED,
+        "split_seed": SPLIT_SEED,
         "student_epochs": STUDENT_EPOCHS,
         "labeller_epochs": LABELLER_EPOCHS,
         "imgsz": IMGSZ,
