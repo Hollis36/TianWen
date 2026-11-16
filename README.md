@@ -280,9 +280,9 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev loop and code style. Tagged
 A preprint is in preparation. For now:
 
 ```bibtex
-@misc{zhang2026tianwen,
+@misc{hollis36_2026tianwen,
   title  = {TianWen: A Plug-In Toolkit for Detector × VLM Fusion in PyTorch Lightning},
-  author = {Zhang, Peifu},
+  author = {Hollis36},
   year   = {2026},
   note   = {Project page: https://hollis36.github.io/tianwen-project-page/},
   url    = {https://github.com/Hollis36/TianWen}
@@ -301,7 +301,7 @@ Stands on the shoulders of: [PyTorch Lightning](https://github.com/Lightning-AI/
 
 <div align="center">
 
-Made by [Peifu Zhang](https://hollis36.github.io/) at Xidian University.<br/>
+Made by [Hollis36](https://hollis36.github.io/).<br/>
 If this project helped you, leave a ⭐ — that's how we know to keep going.
 
 </div>
