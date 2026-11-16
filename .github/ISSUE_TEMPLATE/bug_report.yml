@@ -1,0 +1,32 @@
+name: Bug report
+description: Something fails or gives a wrong result
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and config overrides
+      description: The exact `python tools/...` command, including Hydra overrides.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Error output
+      description: Full traceback or the relevant part of the log.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "OS, Python, torch, ultralytics, GPU/CPU, TianWen commit"
+    validations:
+      required: true

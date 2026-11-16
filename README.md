@@ -15,6 +15,16 @@
 
 [🌐 **Project page**](https://hollis36.github.io/tianwen-project-page/) · [⚡ Quickstart](#-quickstart) · [🧩 Examples](configs/experiment/) · [💬 Discussions](https://github.com/Hollis36/TianWen/discussions) · [🗺️ Roadmap](#%EF%B8%8F-roadmap)
 
+<img src="docs/figures/ssl_hero.png" width="88%" alt="YOLOv8n student mAP@50:95 on DsPCBSD+ with 10% labels: supervised 0.355, YOLOv8m pseudo-labels 0.402, RF-DETR pseudo-labels 0.429">
+
+<sub>With 10% of the labels, pseudo-labels from a foundation-model detector lift a YOLOv8n student by +0.074 mAP@50:95 (3 seeds each; dot = seed, bar = mean). Details in <a href="#-benchmarks">Benchmarks</a>; regenerate with <code>python scripts/plot_readme_hero.py</code>.</sub>
+
+```bash
+git clone https://github.com/Hollis36/TianWen.git && cd TianWen && pip install -e .
+python tools/train.py dataset=dummy detector=yolov8 detector.model_name=yolov8n vlm=clip \
+    fusion=feature_fusion trainer.fast_dev_run=true trainer.accelerator=cpu   # CPU smoke run, no data
+```
+
 </div>
 
 ---

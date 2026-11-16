@@ -1,0 +1,29 @@
+name: Add a detector, VLM, fusion strategy or dataset
+description: Request or propose a new registered component
+labels: [enhancement, help wanted]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Component type
+      options: [Detector, Vision-language model, Fusion strategy, Dataset]
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Name and link
+      placeholder: "e.g. YOLO-World, https://github.com/..."
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is useful
+      description: Which experiment or use case it unlocks.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to implement it (see CONTRIBUTING.md for the registry pattern).
