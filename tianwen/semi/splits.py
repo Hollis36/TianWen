@@ -2,6 +2,7 @@
 
 import glob
 import os
+import shutil
 from dataclasses import dataclass, field
 from typing import List
 
@@ -44,9 +45,33 @@ def _list_images(image_dir: str) -> List[str]:
 
 
 def _link(src: str, dst: str) -> None:
+    """Make ``dst`` point at the file ``src``: symlink, else hard link, else copy.
+
+    Symlinks need elevated rights on Windows and hard links need the same
+    volume, so each step falls back to the next.
+    """
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    if not os.path.lexists(dst):
-        os.symlink(os.path.abspath(src), dst)
+    if os.path.lexists(dst):
+        return
+    src = os.path.realpath(src)
+    try:
+        os.symlink(src, dst)
+    except OSError:
+        try:
+            os.link(src, dst)
+        except OSError:
+            shutil.copy2(src, dst)
+
+
+def _link_dir(src: str, dst: str) -> None:
+    """Make ``dst`` mirror the directory ``src``: symlink, else a file-linked copy."""
+    if os.path.lexists(dst):
+        return
+    src = os.path.realpath(src)
+    try:
+        os.symlink(src, dst, target_is_directory=True)
+    except OSError:
+        shutil.copytree(src, dst, copy_function=_link)
 
 
 def _copy_label(image: str, label_dir: str, dst_dir: str) -> None:

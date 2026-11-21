@@ -5,7 +5,7 @@ from typing import Dict, List
 
 import numpy as np
 
-from tianwen.semi.splits import SSLSplits, _link, write_data_yaml
+from tianwen.semi.splits import SSLSplits, _link, _link_dir, write_data_yaml
 
 
 def _yolo_lines(rows: np.ndarray) -> str:
@@ -49,9 +49,7 @@ def write_pseudo_dataset(
             f.write(_yolo_lines(rows))
 
     for split in ("dev", "test"):
-        dst = os.path.join(out_dir, split)
-        if not os.path.lexists(dst):
-            os.symlink(os.path.abspath(os.path.join(splits.root, split)), dst)
+        _link_dir(os.path.join(splits.root, split), os.path.join(out_dir, split))
     write_data_yaml(os.path.join(out_dir, "data.yaml"), out_dir, splits.class_names, "train/images")
     return {
         "n_pseudo_images": len(splits.unlabeled_images),

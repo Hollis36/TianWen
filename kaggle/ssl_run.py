@@ -5,6 +5,7 @@ One kernel runs one arm of the ablation on the attached YOLO-format dataset:
   self        - YOLOv8n labeller -> pseudo-labels -> YOLOv8n student
   yolo_large  - YOLOv8m labeller -> pseudo-labels -> YOLOv8n student
   vfm         - RF-DETR (DINOv2 backbone) labeller -> pseudo-labels -> YOLOv8n student
+  mean_teacher - online EMA mean-teacher SSOD baseline on YOLOv8n (no offline labeller)
 Writes /kaggle/working/ablation_result.json.
 """
 

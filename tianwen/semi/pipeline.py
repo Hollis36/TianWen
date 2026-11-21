@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Optional
 
 from tianwen.semi.labellers import UltralyticsLabeller, build_labeller
+from tianwen.semi.mean_teacher import train_mean_teacher_student
 from tianwen.semi.pseudo import pseudo_label_quality, write_pseudo_dataset
 from tianwen.semi.splits import SSLSplits
 
@@ -68,6 +69,7 @@ def run_ssl_arm(
     imgsz: int = 640,
     conf: float = 0.5,
     seed: int = 0,
+    burn_in_epochs: int = 10,
 ) -> Dict[str, Any]:
     """Run one arm of the pseudo-label ablation.
 
@@ -75,6 +77,7 @@ def run_ssl_arm(
     (self-training: the student architecture labels the pool), ``yolo_large``
     (a larger CNN labeller) and ``vfm`` (RF-DETR with a DINOv2 backbone). All
     labellers are trained on the same labelled split with dev-based selection.
+    ``mean_teacher`` is the online SSOD baseline (EMA teacher, no offline labeller).
     """
     os.makedirs(work_dir, exist_ok=True)
     out: Dict[str, Any] = {
@@ -85,6 +88,19 @@ def run_ssl_arm(
         "n_test": splits.n_test,
         "conf": conf,
     }
+    if arm == "mean_teacher":
+        t1 = time.time()
+        student = train_mean_teacher_student(
+            splits,
+            os.path.join(work_dir, "student_run"),
+            weights=student_weights,
+            epochs=student_epochs,
+            imgsz=imgsz,
+            seed=seed,
+            conf=conf,
+            burn_in_epochs=burn_in_epochs,
+        )
+        return _finish(out, student, splits, conf, t1)
     t0 = time.time()
     labeller = build_labeller(
         arm,
@@ -126,9 +142,15 @@ def run_ssl_arm(
         imgsz=imgsz,
         seed=seed,
     )
+    return _finish(out, student, splits, conf, t1)
+
+
+def _finish(
+    out: Dict[str, Any], student: Dict[str, Any], splits: SSLSplits, conf: float, t1: float
+):
+    """Record the student's test scores (Ultralytics val + the shared evaluator)."""
     out["student_seconds"] = round(time.time() - t1, 1)
-    out["mAP50"] = student["mAP50"]
-    out["mAP50_95"] = student["mAP50_95"]
+    out.update({k: v for k, v in student.items() if k != "best_weights"})
     # Same evaluator as the labeller score (Ultralytics' val differs by ~0.02).
     student_predictor = UltralyticsLabeller().load(student["best_weights"])
     out.update(_score_on_test(student_predictor, splits, conf, prefix="student_test_eval"))
